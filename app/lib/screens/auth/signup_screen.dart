@@ -28,18 +28,22 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    final success = widget.appState.signUp(
+    final success = await widget.appState.signUp(
       name: _nameController.text,
       studentId: _studentIdController.text,
       email: _emailController.text,
       password: _passwordController.text,
       agreedToPrivacy: _agreedToPrivacy,
     );
+
+    if (!mounted) {
+      return;
+    }
 
     if (success) {
       Navigator.of(context).pop();
@@ -55,6 +59,8 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isBusy = widget.appState.isBusy;
+
     return Scaffold(
       appBar: AppBar(title: const Text('학생 회원가입')),
       body: SafeArea(
@@ -106,14 +112,25 @@ class _SignupScreenState extends State<SignupScreen> {
                   contentPadding: EdgeInsets.zero,
                   value: _agreedToPrivacy,
                   title: const Text('정보 동의'),
-                  onChanged: (value) {
+                  onChanged: isBusy
+                      ? null
+                      : (value) {
                     setState(() {
                       _agreedToPrivacy = value ?? false;
                     });
                   },
                 ),
                 const SizedBox(height: 16),
-                FilledButton(onPressed: _submit, child: const Text('학생 회원가입')),
+                FilledButton(
+                  onPressed: isBusy ? null : _submit,
+                  child: isBusy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('학생 회원가입'),
+                ),
               ],
             ),
           ),

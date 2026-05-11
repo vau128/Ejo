@@ -1,0 +1,26 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+app:
+  datasource:
+    enabled: true
+    host: ${DB_HOST}
+    port: ${DB_PORT:3306}
+    database: ${DB_NAME}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    ssl-mode: ${DB_SSL_MODE:REQUIRED}
+  iot:
+    enabled: true
+    base-url: ${IOT_BASE_URL}
+    api-key: ${IOT_API_KEY}
+    request-timeout-ms: ${IOT_TIMEOUT_MS:3000}
+    heartbeat-threshold-seconds: ${IOT_HEARTBEAT_THRESHOLD_SECONDS:30}
+  aws:
+    enabled: true
+    region: ${AWS_REGION}
+    s3-bucket: ${AWS_S3_BUCKET}
+    access-key: ${AWS_ACCESS_KEY_ID}
+    secret-key: ${AWS_SECRET_ACCESS_KEY}

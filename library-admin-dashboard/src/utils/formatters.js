@@ -32,8 +32,10 @@ export function seatTone(status) {
     case 'AVAILABLE':
       return 'bg-white text-slate-600 ring-1 ring-slate-200';
     case 'OBJECT_ONLY':
+    case 'ITEM':
       return 'bg-amber-200 text-amber-900';
     case 'VACANT_LONG':
+    case 'RESERVED':
       return 'bg-rose-200 text-rose-900';
     case 'SENSOR_DELAY':
       return 'bg-violet-200 text-violet-900';
@@ -49,8 +51,10 @@ export function seatLabel(status) {
     case 'AVAILABLE':
       return '비어있음';
     case 'OBJECT_ONLY':
+    case 'ITEM':
       return '물품 감지';
     case 'VACANT_LONG':
+    case 'RESERVED':
       return '장시간 비움';
     case 'SENSOR_DELAY':
       return '센서 지연';

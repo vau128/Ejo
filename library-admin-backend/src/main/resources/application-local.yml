@@ -1,0 +1,30 @@
+spring:
+  config:
+    activate:
+      on-profile: local
+
+app:
+  datasource:
+    enabled: false
+    host: localhost
+    port: 3306
+    database: library_local
+    username: local_user
+    password: local_password
+    ssl-mode: DISABLED
+  iot:
+    enabled: false
+    base-url: http://localhost:8090
+    api-key: local-iot-key
+    request-timeout-ms: 3000
+    heartbeat-threshold-seconds: 30
+  aws:
+    enabled: false
+    region: ap-northeast-2
+    s3-bucket: local-library-assets
+    access-key: replace-me
+    secret-key: replace-me
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

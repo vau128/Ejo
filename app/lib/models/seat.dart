@@ -13,6 +13,15 @@ class Seat {
   final SeatStatus status;
   final bool selectedByCurrentUser;
 
+  factory Seat.fromJson(Map<String, dynamic> json) {
+    return Seat(
+      id: json['seatId'] as String,
+      number: json['seatNumber'] as int,
+      status: _statusFromApi(json['status'] as String?),
+      selectedByCurrentUser: json['selectedByCurrentUser'] as bool? ?? false,
+    );
+  }
+
   Seat copyWith({
     String? id,
     int? number,
@@ -26,5 +35,20 @@ class Seat {
       selectedByCurrentUser:
           selectedByCurrentUser ?? this.selectedByCurrentUser,
     );
+  }
+
+  static SeatStatus _statusFromApi(String? status) {
+    switch (status) {
+      case 'AVAILABLE':
+        return SeatStatus.available;
+      case 'OCCUPIED':
+        return SeatStatus.occupied;
+      case 'ITEM':
+        return SeatStatus.item;
+      case 'RESERVED':
+        return SeatStatus.reserved;
+      default:
+        return SeatStatus.available;
+    }
   }
 }

@@ -1,27 +1,30 @@
 import 'package:flutter/material.dart';
 
-import '../mock/mock_data.dart';
 import '../models/app_settings.dart';
 import '../models/lost_item_report.dart';
 import '../models/seat.dart';
 import '../models/student_user.dart';
+import 'app_api.dart';
 
 class AppState extends ChangeNotifier {
-  StudentUser? _currentUser;
-  StudentUser? _registeredUser;
-  String? _registeredPassword;
-  bool _isLoggedIn = false;
-  List<Seat> _seats = List<Seat>.from(MockData.initialSeats);
-  late List<LostItemReport> _lostItemReports;
-  AppSettings _settings = MockData.defaultSettings;
-  String? _authErrorMessage;
+  final AppApi _api = const AppApi();
 
-  AppState() {
-    _lostItemReports = List<LostItemReport>.from(MockData.lostItemReports);
-  }
+  StudentUser? _currentUser;
+  String? _authToken;
+  bool _isLoggedIn = false;
+  bool _isBusy = false;
+  List<Seat> _seats = const [];
+  List<LostItemReport> _lostItemReports = const [];
+  AppSettings _settings = const AppSettings(
+    pushEnabled: true,
+    seatAlertEnabled: true,
+    warningAlertEnabled: false,
+  );
+  String? _authErrorMessage;
 
   StudentUser? get currentUser => _currentUser;
   bool get isLoggedIn => _isLoggedIn;
+  bool get isBusy => _isBusy;
   List<Seat> get seats => List<Seat>.unmodifiable(_seats);
   List<LostItemReport> get lostItemReports =>
       List<LostItemReport>.unmodifiable(_lostItemReports);
@@ -43,78 +46,76 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool login({required String email, required String password}) {
-    final matchesMockUser =
-        email.trim() == MockData.currentStudent.email &&
-        password == MockData.mockPassword;
-    final matchesSignedUpUser =
-        _registeredUser != null &&
-        email.trim() == _registeredUser!.email &&
-        password == _registeredPassword;
-
-    if (matchesMockUser) {
-      _currentUser = MockData.currentStudent;
+  Future<bool> login({required String email, required String password}) async {
+    _setBusy(true);
+    try {
+      final result = await _api.login(email: email, password: password);
+      _authToken = result.token;
+      _currentUser = result.user;
+      await _loadAppData();
       _isLoggedIn = true;
       _authErrorMessage = null;
       notifyListeners();
       return true;
-    }
-
-    if (matchesSignedUpUser && password.isNotEmpty) {
-      _currentUser = _registeredUser;
-      _isLoggedIn = true;
-      _authErrorMessage = null;
+    } on AppApiException catch (error) {
+      _authErrorMessage = error.message;
       notifyListeners();
-      return true;
+      return false;
+    } finally {
+      _setBusy(false);
     }
-
-    _authErrorMessage = '이메일 또는 비밀번호를 확인해주세요.';
-    notifyListeners();
-    return false;
   }
 
-  bool signUp({
+  Future<bool> signUp({
     required String name,
     required String studentId,
     required String email,
     required String password,
     required bool agreedToPrivacy,
-  }) {
+  }) async {
     if (!agreedToPrivacy) {
       _authErrorMessage = '정보 동의 후 회원가입이 가능합니다.';
       notifyListeners();
       return false;
     }
 
-    if (password.trim().length < 6) {
-      _authErrorMessage = '비밀번호는 6자 이상 입력해주세요.';
+    _setBusy(true);
+    try {
+      final result = await _api.signUp(
+        name: name,
+        studentId: studentId,
+        email: email,
+        password: password,
+        agreedToPrivacy: agreedToPrivacy,
+      );
+      _authToken = result.token;
+      _currentUser = result.user;
+      await _loadAppData();
+      _isLoggedIn = true;
+      _authErrorMessage = null;
+      notifyListeners();
+      return true;
+    } on AppApiException catch (error) {
+      _authErrorMessage = error.message;
       notifyListeners();
       return false;
+    } finally {
+      _setBusy(false);
     }
-
-    _currentUser = StudentUser(
-      id: 'student-local-${DateTime.now().millisecondsSinceEpoch}',
-      name: name.trim(),
-      studentId: studentId.trim(),
-      email: email.trim(),
-      warningCount: 1,
-      agreedToPrivacy: agreedToPrivacy,
-    );
-    _registeredUser = _currentUser;
-    _registeredPassword = password;
-    _isLoggedIn = true;
-    _authErrorMessage = null;
-    _seats = List<Seat>.from(MockData.initialSeats);
-    notifyListeners();
-    return true;
   }
 
   void logout() {
     _isLoggedIn = false;
     _currentUser = null;
+    _authToken = null;
     _authErrorMessage = null;
-    _seats = List<Seat>.from(MockData.initialSeats);
-    _settings = MockData.defaultSettings;
+    _seats = const [];
+    _lostItemReports = const [];
+    _settings = const AppSettings(
+      pushEnabled: true,
+      seatAlertEnabled: true,
+      warningAlertEnabled: false,
+    );
     notifyListeners();
   }
 
@@ -148,73 +149,78 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  String? toggleSeatSelection(String seatId) {
-    final targetSeat = _seats.firstWhere((seat) => seat.id == seatId);
+  Future<String?> toggleSeatSelection(String seatId) async {
+    final token = _authToken;
+    if (token == null) {
+      return '로그인이 필요합니다.';
+    }
 
-    if (targetSeat.selectedByCurrentUser) {
-      _seats = _seats
-          .map(
-            (seat) => seat.id == seatId
-                ? seat.copyWith(selectedByCurrentUser: false)
-                : seat,
-          )
-          .toList();
+    try {
+      final message = await _api.toggleSeatSelection(token, seatId);
+      _seats = await _api.fetchSeats(token);
       notifyListeners();
-      return '좌석 선택이 취소되었습니다.';
+      return message;
+    } on AppApiException catch (error) {
+      return error.message;
+    }
+  }
+
+  Future<String?> refreshSeatStatuses() async {
+    final token = _authToken;
+    if (token == null) {
+      return '로그인이 필요합니다.';
     }
 
-    if (targetSeat.status != SeatStatus.available) {
-      return '${targetSeat.number}번 좌석은 ${seatStatusLabel(targetSeat.status)} 상태입니다.';
+    try {
+      _seats = await _api.fetchSeats(token);
+      notifyListeners();
+      return null;
+    } on AppApiException catch (error) {
+      return error.message;
+    }
+  }
+
+  Future<String?> updatePushEnabled(bool value) async {
+    return _saveSettings(_settings.copyWith(pushEnabled: value));
+  }
+
+  Future<String?> updateSeatAlertEnabled(bool value) async {
+    return _saveSettings(_settings.copyWith(seatAlertEnabled: value));
+  }
+
+  Future<String?> updateWarningAlertEnabled(bool value) async {
+    return _saveSettings(_settings.copyWith(warningAlertEnabled: value));
+  }
+
+  Future<void> _loadAppData() async {
+    final token = _authToken;
+    if (token == null) {
+      return;
     }
 
-    _seats = _seats
-        .map((seat) => seat.copyWith(selectedByCurrentUser: seat.id == seatId))
-        .toList();
-    notifyListeners();
-    return null;
+    _currentUser = await _api.fetchCurrentUser(token);
+    _seats = await _api.fetchSeats(token);
+    _lostItemReports = await _api.fetchLostItems(token);
+    _settings = await _api.fetchSettings(token);
   }
 
-  void refreshSeatStatuses() {
-    final selectedSeatId = selectedSeat?.id;
-    final rotatedStatuses = [
-      SeatStatus.available,
-      SeatStatus.occupied,
-      SeatStatus.item,
-      SeatStatus.reserved,
-      SeatStatus.available,
-      SeatStatus.occupied,
-    ];
+  Future<String?> _saveSettings(AppSettings nextSettings) async {
+    final token = _authToken;
+    if (token == null) {
+      return '로그인이 필요합니다.';
+    }
 
-    _seats = _seats.asMap().entries.map((entry) {
-      final index = entry.key;
-      final seat = entry.value;
-      final nextStatus =
-          rotatedStatuses[(index + DateTime.now().second) %
-              rotatedStatuses.length];
-      final isSelected =
-          seat.id == selectedSeatId && nextStatus == SeatStatus.available;
-
-      return seat.copyWith(
-        status: nextStatus,
-        selectedByCurrentUser: isSelected,
-      );
-    }).toList();
-
-    notifyListeners();
+    try {
+      _settings = await _api.updateSettings(token, nextSettings);
+      notifyListeners();
+      return null;
+    } on AppApiException catch (error) {
+      return error.message;
+    }
   }
 
-  void updatePushEnabled(bool value) {
-    _settings = _settings.copyWith(pushEnabled: value);
-    notifyListeners();
-  }
-
-  void updateSeatAlertEnabled(bool value) {
-    _settings = _settings.copyWith(seatAlertEnabled: value);
-    notifyListeners();
-  }
-
-  void updateWarningAlertEnabled(bool value) {
-    _settings = _settings.copyWith(warningAlertEnabled: value);
+  void _setBusy(bool value) {
+    _isBusy = value;
     notifyListeners();
   }
 }
