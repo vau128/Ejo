@@ -6,16 +6,15 @@ spring:
     name: library-admin-backend
   profiles:
     default: local
+  jpa:
+    open-in-view: false
 
 app:
   auth:
     token-header: X-Student-Token
     admin-token-header: X-Admin-Token
   cors:
-    allowed-origins:
-      - http://localhost:5173
-      - http://localhost:5174
-      - http://10.0.2.2:8080
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174,http://10.0.2.2:8080}
   datasource:
     enabled: false
   iot:

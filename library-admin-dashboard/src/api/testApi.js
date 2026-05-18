@@ -1,11 +1,6 @@
-import axios from 'axios';
-
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+import client from './client';
 
 export async function testBackendConnection() {
-  const { data } = await axios.get(`${apiBaseUrl}/api/test`, {
-    timeout: 8000,
-  });
-
+  const { data } = await client.get('/test');
   return data;
 }

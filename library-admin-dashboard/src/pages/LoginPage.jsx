@@ -23,7 +23,11 @@ export default function LoginPage() {
       await login(form);
       navigate('/overview');
     } catch (err) {
-      setError(err.response?.data?.message || '로그인에 실패했습니다.');
+      if (!err.response) {
+        setError('백엔드에 연결할 수 없습니다. Amplify 도메인 CORS 허용 또는 HTTPS API 설정을 확인하세요.');
+      } else {
+        setError(err.response?.data?.message || '로그인에 실패했습니다.');
+      }
     } finally {
       setSubmitting(false);
     }

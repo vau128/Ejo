@@ -1,9 +1,8 @@
 import axios from 'axios';
-
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+import { apiBaseUrl } from './config';
 
 const client = axios.create({
-  baseURL: apiBaseUrl ? `${apiBaseUrl}/api` : undefined,
+  baseURL: apiBaseUrl || undefined,
   timeout: 8000,
 });
 
