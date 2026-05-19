@@ -2,19 +2,31 @@ spring:
   config:
     activate:
       on-profile: local
+  datasource:
+    url: jdbc:mysql://localhost:3306/library_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: library_user
+    password: root1234!
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
 
 app:
   datasource:
-    enabled: false
+    enabled: true
     host: localhost
     port: 3306
-    database: library_local
-    username: local_user
-    password: local_password
+    database: library_db
+    username: library_user
+    password: root1234!
     ssl-mode: DISABLED
   iot:
     enabled: false
-    base-url: http://localhost:8090
+    base-url: http://iot-local
     api-key: local-iot-key
     request-timeout-ms: 3000
     heartbeat-threshold-seconds: 30
