@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { getSeatDetail, getZoneSeats } from '../api/dashboardApi';
+import { useMemo, useState } from 'react';
+import { getSeats } from '../api/dashboardApi';
 import DataTable from '../components/DataTable';
 import MetricCard from '../components/MetricCard';
 import PageHeader from '../components/PageHeader';
@@ -7,89 +7,62 @@ import SearchField from '../components/SearchField';
 import SeatGrid from '../components/SeatGrid';
 import SectionCard from '../components/SectionCard';
 import StatusBadge from '../components/StatusBadge';
+import { useApiData } from '../hooks/useApiData';
 
 const filters = [
   { value: '', label: '전체' },
   { value: 'OCCUPIED', label: '사용 중' },
   { value: 'AVAILABLE', label: '비어있음' },
-  { value: 'OBJECT_ONLY', label: '물품' },
-  { value: 'VACANT_LONG', label: '장시간 비움' },
-  { value: 'SENSOR_DELAY', label: '센서 지연' },
+  { value: 'SQUATTING', label: '사석화' },
+  { value: 'ABNORMAL', label: '비정상' },
 ];
 
 export default function ZoneSeatsPage() {
+  const { data, loading, error } = useApiData(getSeats, [], { intervalMs: 8000 });
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
-  const [data, setData] = useState(null);
-  const [detail, setDetail] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [selectedSeatNum, setSelectedSeatNum] = useState(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const seats = useMemo(() => data ?? [], [data]);
+  const filteredSeats = useMemo(
+    () =>
+      seats.filter((seat) => {
+        const statusMatched = !status || seat.status === status;
+        const searchMatched = !search || String(seat.seat_num).includes(search) || seat.location.toLowerCase().includes(search.toLowerCase());
+        return statusMatched && searchMatched;
+      }),
+    [search, seats, status]
+  );
 
-    async function load() {
-      try {
-        setLoading(true);
-        const response = await getZoneSeats({ status, search });
-        if (cancelled) return;
-        setData(response);
-        setError('');
-        if (response.seats.length) {
-          const target = detail?.seatId ? response.seats.find((seat) => seat.seatId === detail.seatId) : response.seats[0];
-          if (target) {
-            const seatDetail = await getSeatDetail(target.seatId);
-            if (!cancelled) setDetail(seatDetail);
-          } else {
-            setDetail(null);
-          }
-        } else {
-          setDetail(null);
-        }
-      } catch (err) {
-        if (!cancelled) setError(err.response?.data?.message || '좌석 데이터를 불러오지 못했습니다.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [search, status]);
+  const selectedSeat = filteredSeats.find((seat) => seat.seat_num === selectedSeatNum) ?? filteredSeats[0] ?? null;
 
   const seatColumns = useMemo(
     () => [
-      { key: 'seatId', label: '좌석' },
-      { key: 'statusLabel', label: '상태', render: (row) => <StatusBadge>{row.statusLabel}</StatusBadge> },
-      { key: 'lastUpdated', label: '최근 변경 시각' },
-      { key: 'notes', label: '비고' },
+      { key: 'seat_num', label: '좌석' },
+      { key: 'status', label: '상태', render: (row) => <StatusBadge>{statusLabel(row.status)}</StatusBadge> },
+      { key: 'checked_in', label: '발권', render: (row) => (row.checked_in ? '발권 중' : '미발권') },
+      { key: 'posture', label: '현재 자세' },
+      { key: 'location', label: '위치' },
     ],
     []
   );
-
-  const selectSeat = async (seat) => {
-    const response = await getSeatDetail(seat.seatId);
-    setDetail(response);
-  };
 
   if (loading && !data) return <div className="app-card p-10 text-center text-sm text-slate-500">좌석 현황을 불러오는 중입니다.</div>;
   if (error && !data) return <div className="app-card p-10 text-center text-sm text-rose-600">{error}</div>;
 
   return (
     <div>
-      <PageHeader title="3구역 좌석 확인" description="좌석 상태 필터와 검색을 통해 3구역 좌석을 관리합니다." />
+      <PageHeader title="3구역 좌석 확인" description="사석화 상태와 현재 자세, 압력값을 한 번에 확인합니다." />
 
       <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="총 좌석 수" value={data.summary.totalSeats} helper="3구역 기준" />
-        <MetricCard label="사용 좌석 수" value={data.summary.occupiedSeats} helper="실시간 점유" accent="emerald" />
-        <MetricCard label="비어있는 좌석" value={data.summary.availableSeats} helper="즉시 사용 가능" />
-        <MetricCard label="비정상 좌석 수" value={data.summary.abnormalSeats} helper="점검 필요" accent="rose" />
+        <MetricCard label="총 좌석 수" value={seats.length} helper="조회 API 기준" />
+        <MetricCard label="사용 좌석 수" value={seats.filter((seat) => seat.status === 'OCCUPIED').length} helper="현재 점유" accent="emerald" />
+        <MetricCard label="발권 좌석" value={seats.filter((seat) => seat.checked_in).length} helper="체크인 기준" accent="brand" />
+        <MetricCard label="사석화/비정상" value={seats.filter((seat) => seat.status === 'SQUATTING' || seat.status === 'ABNORMAL').length} helper="관리 필요" accent="rose" />
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
-        <SectionCard title="좌석 상태" subtitle="좌석 번호별 상태를 바로 확인할 수 있습니다.">
+        <SectionCard title="좌석 상태" subtitle="상태 필터와 검색으로 필요한 좌석만 좁혀 볼 수 있습니다.">
           <div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-wrap gap-2">
               {filters.map((filter) => (
@@ -102,57 +75,55 @@ export default function ZoneSeatsPage() {
                 </button>
               ))}
             </div>
-            <SearchField value={search} onChange={setSearch} placeholder="좌석 번호를 검색하세요" />
+            <SearchField value={search} onChange={setSearch} placeholder="좌석 번호 또는 위치 검색" />
           </div>
-          <SeatGrid seats={data.seats} selectedSeatId={detail?.seatId} onSelect={selectSeat} />
+          <SeatGrid
+            seats={filteredSeats.map((seat) => ({
+              seatId: `seat-${seat.seat_num}`,
+              status: seat.status,
+              lastUpdated: seat.posture,
+            }))}
+            selectedSeatId={selectedSeat ? `seat-${selectedSeat.seat_num}` : null}
+            onSelect={(seat) => setSelectedSeatNum(Number(String(seat.seatId).replace('seat-', '')))}
+          />
           <div className="mt-6">
-            <DataTable columns={seatColumns} rows={data.seats} emptyText="검색 결과가 없습니다." />
+            <DataTable columns={seatColumns} rows={filteredSeats} emptyText="검색 결과가 없습니다." />
           </div>
         </SectionCard>
 
-        <SectionCard title="좌석 상세 정보" subtitle="선택한 좌석의 센서와 상태 이력을 보여줍니다.">
-          {detail ? (
+        <SectionCard title="좌석 상세 정보" subtitle="현재 자세와 압력값을 통해 헬스케어 상태를 확인합니다.">
+          {selectedSeat ? (
             <div className="grid gap-5">
               <div className="rounded-2xl bg-slate-50 p-5">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm text-slate-500">선택 좌석</p>
-                    <p className="mt-2 text-3xl font-semibold text-slate-800">{detail.seatId}</p>
+                    <p className="mt-2 text-3xl font-semibold text-slate-800">{selectedSeat.location}</p>
                   </div>
-                  <StatusBadge>{detail.statusLabel}</StatusBadge>
+                  <StatusBadge>{statusLabel(selectedSeat.status)}</StatusBadge>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-600">
                   <div className="rounded-2xl bg-white p-4">
-                    <p className="text-slate-500">최근 변경</p>
-                    <p className="mt-1 font-semibold text-slate-800">{detail.lastUpdated}</p>
+                    <p className="text-slate-500">발권 상태</p>
+                    <p className="mt-1 font-semibold text-slate-800">{selectedSeat.checked_in ? '체크인 중' : '미체크인'}</p>
                   </div>
                   <div className="rounded-2xl bg-white p-4">
-                    <p className="text-slate-500">상태 유지 시간</p>
-                    <p className="mt-1 font-semibold text-slate-800">{detail.durationMinutes}분</p>
+                    <p className="text-slate-500">현재 자세</p>
+                    <p className="mt-1 font-semibold text-slate-800">{selectedSeat.posture}</p>
                   </div>
                 </div>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <SensorCard label="압력 값" value={detail.sensor.pressureValue} />
-                <SensorCard label="사람 감지" value={detail.sensor.personDetected ? '감지' : '미감지'} />
-                <SensorCard label="물체 감지" value={detail.sensor.objectDetected ? '감지' : '미감지'} />
-                <SensorCard label="카메라 신뢰도" value={detail.sensor.cameraConfidence} />
+                <SensorCard label="왼쪽 압력" value={selectedSeat.left_pressure} />
+                <SensorCard label="오른쪽 압력" value={selectedSeat.right_pressure} />
+                <SensorCard label="등 압력" value={selectedSeat.back_pressure} />
+                <SensorCard label="마지막 갱신" value={formatDate(selectedSeat.updated_at)} />
               </div>
 
-              <div>
-                <p className="mb-3 text-sm font-semibold text-slate-700">최근 상태 이력</p>
-                <div className="grid gap-3">
-                  {detail.history.map((item) => (
-                    <div key={item.time} className="rounded-2xl border border-slate-200 p-4">
-                      <div className="flex items-center justify-between gap-4">
-                        <p className="font-medium text-slate-800">{item.statusLabel}</p>
-                        <span className="text-sm text-slate-500">{item.time}</span>
-                      </div>
-                      <p className="mt-2 text-sm text-slate-600">{item.reason}</p>
-                    </div>
-                  ))}
-                </div>
+              <div className="rounded-2xl border border-slate-200 p-4 text-sm text-slate-600">
+                <p className="font-semibold text-slate-800">헬스케어 해석</p>
+                <p className="mt-2">{healthcareMessage(selectedSeat.posture)}</p>
               </div>
             </div>
           ) : (
@@ -173,4 +144,39 @@ function SensorCard({ label, value }) {
       <p className="mt-2 text-lg font-semibold text-slate-800">{value}</p>
     </div>
   );
+}
+
+function statusLabel(status) {
+  switch (status) {
+    case 'OCCUPIED':
+      return '사용 중';
+    case 'SQUATTING':
+      return '사석화';
+    case 'ABNORMAL':
+      return '비정상';
+    default:
+      return '비어있음';
+  }
+}
+
+function healthcareMessage(posture) {
+  switch (posture) {
+    case '정상':
+      return '바른 자세 유지 중입니다.';
+    case '거북목/허리 숙임':
+      return '상체가 앞으로 기울어져 있어 자세 교정이 필요합니다.';
+    case '왼쪽으로 기울어짐':
+      return '왼쪽 체중 쏠림이 감지되었습니다.';
+    case '오른쪽으로 기울어짐(다리 꼬기)':
+      return '오른쪽 체중 쏠림이 감지되었습니다.';
+    case '등받이에 기대지 않음':
+      return '등받이 압력이 낮아 허리 지지가 부족합니다.';
+    default:
+      return posture;
+  }
+}
+
+function formatDate(value) {
+  if (!value) return '-';
+  return new Date(value).toLocaleString('ko-KR');
 }

@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { testBackendConnection } from './api/testApi';
-import { useAuth } from './context/AuthContext';
 import AdminLayout from './layouts/AdminLayout';
-import LoginPage from './pages/LoginPage';
 import SeatsDashboardPage from './pages/SeatsDashboardPage';
 import OverviewPage from './pages/OverviewPage';
 import ActionsPage from './pages/ActionsPage';
@@ -15,11 +13,6 @@ import ZoneSeatsPage from './pages/ZoneSeatsPage';
 import AbnormalSeatsPage from './pages/AbnormalSeatsPage';
 import LostItemsPage from './pages/LostItemsPage';
 import SystemStatusPage from './pages/SystemStatusPage';
-
-function ProtectedRoute() {
-  const { isAuthenticated } = useAuth();
-  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
-}
 
 export default function App() {
   const hasCheckedBackend = useRef(false);
@@ -46,22 +39,19 @@ export default function App() {
   return (
     <>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route element={<ProtectedRoute />}>
-          <Route element={<AdminLayout />}>
-            <Route path="/" element={<Navigate to="/overview" replace />} />
-            <Route path="/overview" element={<OverviewPage />} />
-            <Route path="/actions" element={<ActionsPage />} />
-            <Route path="/alert-history" element={<AlertHistoryPage />} />
-            <Route path="/alert-management" element={<AlertManagementPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/statistics" element={<StatisticsPage />} />
-            <Route path="/zone-seats" element={<ZoneSeatsPage />} />
-            <Route path="/abnormal-seats" element={<AbnormalSeatsPage />} />
-            <Route path="/lost-items" element={<LostItemsPage />} />
-            <Route path="/system-status" element={<SystemStatusPage />} />
-            <Route path="/seat-test" element={<SeatsDashboardPage />} />
-          </Route>
+        <Route element={<AdminLayout />}>
+          <Route path="/" element={<Navigate to="/overview" replace />} />
+          <Route path="/overview" element={<OverviewPage />} />
+          <Route path="/actions" element={<ActionsPage />} />
+          <Route path="/alert-history" element={<AlertHistoryPage />} />
+          <Route path="/alert-management" element={<AlertManagementPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/statistics" element={<StatisticsPage />} />
+          <Route path="/zone-seats" element={<ZoneSeatsPage />} />
+          <Route path="/abnormal-seats" element={<AbnormalSeatsPage />} />
+          <Route path="/lost-items" element={<LostItemsPage />} />
+          <Route path="/system-status" element={<SystemStatusPage />} />
+          <Route path="/seat-test" element={<SeatsDashboardPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

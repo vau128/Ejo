@@ -15,6 +15,7 @@ export function statusClass(status) {
     case '주의':
       return 'bg-amber-50 text-amber-700';
     case '장시간 비움':
+    case '사석화':
     case '지연':
       return 'bg-rose-50 text-rose-700';
     case '오프라인':
@@ -36,6 +37,8 @@ export function seatTone(status) {
       return 'bg-amber-200 text-amber-900';
     case 'VACANT_LONG':
     case 'RESERVED':
+    case 'SQUATTING':
+    case 'ABNORMAL':
       return 'bg-rose-200 text-rose-900';
     case 'SENSOR_DELAY':
       return 'bg-violet-200 text-violet-900';
@@ -56,6 +59,9 @@ export function seatLabel(status) {
     case 'VACANT_LONG':
     case 'RESERVED':
       return '장시간 비움';
+    case 'SQUATTING':
+    case 'ABNORMAL':
+      return '사석화';
     case 'SENSOR_DELAY':
       return '센서 지연';
     default:
