@@ -439,7 +439,7 @@ public class SeatApiService {
 
     private int normalizeThreshold(int thresholdMinutes) {
         return switch (thresholdMinutes) {
-            case 30, 60, 120, 240 -> thresholdMinutes;
+            case 10, 30, 60, 120, 240 -> thresholdMinutes;
             default -> DEFAULT_SQUATTING_THRESHOLD_MINUTES;
         };
     }

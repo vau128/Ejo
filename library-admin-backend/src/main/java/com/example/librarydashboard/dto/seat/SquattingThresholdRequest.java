@@ -7,7 +7,7 @@ import jakarta.validation.constraints.NotNull;
 
 public record SquattingThresholdRequest(
         @NotNull(message = "threshold_minutes는 필수입니다.")
-        @Min(value = 30, message = "threshold_minutes는 30 이상이어야 합니다.")
+        @Min(value = 10, message = "threshold_minutes는 10 이상이어야 합니다.")
         @Max(value = 240, message = "threshold_minutes는 240 이하여야 합니다.")
         @JsonProperty("threshold_minutes")
         Integer thresholdMinutes
