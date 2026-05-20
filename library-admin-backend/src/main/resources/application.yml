@@ -22,7 +22,7 @@ app:
     token-header: X-Student-Token
     admin-token-header: X-Admin-Token
   cors:
-    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:5173,https://*.amplifyapp.com}
+    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:5173,https://*.amplifyapp.com,https://ssejo.site,https://www.ssejo.site,http://13.209.33.104}
   datasource:
     enabled: false
   iot:
