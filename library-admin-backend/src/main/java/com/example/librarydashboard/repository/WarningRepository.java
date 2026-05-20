@@ -7,5 +7,5 @@ import java.util.List;
 
 public interface WarningRepository extends JpaRepository<Warning, Long> {
 
-    List<Warning> findAllByOrderByCreatedAtDesc();
+    List<Warning> findAllByOrderByWarningTimeDesc();
 }

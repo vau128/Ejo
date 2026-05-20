@@ -52,7 +52,7 @@ class _HomeShellState extends State<HomeShell> {
           NavigationDestination(
             icon: Icon(Icons.warning_amber_outlined),
             selectedIcon: Icon(Icons.warning_amber),
-            label: '경고 누적',
+            label: '경고 알림',
           ),
           NavigationDestination(
             icon: Icon(Icons.inventory_2_outlined),

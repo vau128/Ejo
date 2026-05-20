@@ -35,18 +35,60 @@ public class Seat {
     @Column(name = "status", nullable = false, length = 32)
     private String status;
 
+    @Column(name = "checked_in", nullable = false)
+    private boolean checkedIn;
+
+    @Column(name = "occupied", nullable = false)
+    private boolean occupied;
+
+    @Column(name = "posture", length = 100)
+    private String posture;
+
+    @Column(name = "left_pressure")
+    private Integer leftPressure;
+
+    @Column(name = "right_pressure")
+    private Integer rightPressure;
+
+    @Column(name = "back_pressure")
+    private Integer backPressure;
+
+    @Column(name = "posture_timestamp")
+    private LocalDateTime postureTimestamp;
+
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
     protected Seat() {
     }
 
-    public Seat(Integer seatNum, String location, String seatCode, Integer pressure, String status, LocalDateTime updatedAt) {
+    public Seat(
+            Integer seatNum,
+            String location,
+            String seatCode,
+            Integer pressure,
+            String status,
+            boolean checkedIn,
+            boolean occupied,
+            String posture,
+            Integer leftPressure,
+            Integer rightPressure,
+            Integer backPressure,
+            LocalDateTime postureTimestamp,
+            LocalDateTime updatedAt
+    ) {
         this.seatNum = seatNum;
         this.location = location;
         this.seatCode = seatCode;
         this.pressure = pressure;
         this.status = status;
+        this.checkedIn = checkedIn;
+        this.occupied = occupied;
+        this.posture = posture;
+        this.leftPressure = leftPressure;
+        this.rightPressure = rightPressure;
+        this.backPressure = backPressure;
+        this.postureTimestamp = postureTimestamp;
         this.updatedAt = updatedAt;
     }
 
@@ -100,6 +142,62 @@ public class Seat {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public boolean isCheckedIn() {
+        return checkedIn;
+    }
+
+    public void setCheckedIn(boolean checkedIn) {
+        this.checkedIn = checkedIn;
+    }
+
+    public boolean isOccupied() {
+        return occupied;
+    }
+
+    public void setOccupied(boolean occupied) {
+        this.occupied = occupied;
+    }
+
+    public String getPosture() {
+        return posture;
+    }
+
+    public void setPosture(String posture) {
+        this.posture = posture;
+    }
+
+    public Integer getLeftPressure() {
+        return leftPressure;
+    }
+
+    public void setLeftPressure(Integer leftPressure) {
+        this.leftPressure = leftPressure;
+    }
+
+    public Integer getRightPressure() {
+        return rightPressure;
+    }
+
+    public void setRightPressure(Integer rightPressure) {
+        this.rightPressure = rightPressure;
+    }
+
+    public Integer getBackPressure() {
+        return backPressure;
+    }
+
+    public void setBackPressure(Integer backPressure) {
+        this.backPressure = backPressure;
+    }
+
+    public LocalDateTime getPostureTimestamp() {
+        return postureTimestamp;
+    }
+
+    public void setPostureTimestamp(LocalDateTime postureTimestamp) {
+        this.postureTimestamp = postureTimestamp;
     }
 
     public LocalDateTime getUpdatedAt() {

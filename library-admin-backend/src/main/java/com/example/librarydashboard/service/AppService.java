@@ -3,11 +3,13 @@ package com.example.librarydashboard.service;
 import com.example.librarydashboard.dto.AppSettingsRequest;
 import com.example.librarydashboard.dto.StudentLoginRequest;
 import com.example.librarydashboard.dto.StudentSignupRequest;
+import com.example.librarydashboard.entity.Seat;
 import com.example.librarydashboard.port.out.DeviceEventGateway;
 import com.example.librarydashboard.port.out.LostItemStore;
 import com.example.librarydashboard.port.out.SeatStore;
 import com.example.librarydashboard.port.out.StudentAccountStore;
 import com.example.librarydashboard.port.out.UserSettingsStore;
+import com.example.librarydashboard.repository.SeatRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -27,19 +29,25 @@ public class AppService {
     private final LostItemStore lostItemStore;
     private final UserSettingsStore userSettingsStore;
     private final DeviceEventGateway deviceEventGateway;
+    private final SeatRepository seatRepository;
+    private final SeatApiService seatApiService;
 
     public AppService(
             StudentAccountStore studentAccountStore,
             SeatStore seatStore,
             LostItemStore lostItemStore,
             UserSettingsStore userSettingsStore,
-            DeviceEventGateway deviceEventGateway
+            DeviceEventGateway deviceEventGateway,
+            SeatRepository seatRepository,
+            SeatApiService seatApiService
     ) {
         this.studentAccountStore = studentAccountStore;
         this.seatStore = seatStore;
         this.lostItemStore = lostItemStore;
         this.userSettingsStore = userSettingsStore;
         this.deviceEventGateway = deviceEventGateway;
+        this.seatRepository = seatRepository;
+        this.seatApiService = seatApiService;
     }
 
     public String resolveToken(String authorization, String studentToken) {
@@ -94,23 +102,24 @@ public class AppService {
     public Map<String, Object> getSeats(String token) {
         Map<String, Object> user = requireUser(token);
         String selectedSeatId = stringValue(user.get("selectedSeatId"));
-        List<Map<String, Object>> seats = seatStore.findAll();
+        seatApiService.bootstrapSeatsIfEmpty();
+        List<Seat> seats = seatRepository.findAll().stream()
+                .sorted((left, right) -> Integer.compare(left.getSeatNum(), right.getSeatNum()))
+                .toList();
         List<Map<String, Object>> seatItems = seats.stream()
                 .map(seat -> seatResponse(seat, selectedSeatId))
                 .toList();
 
-        long availableCount = seats.stream().filter(seat -> Objects.equals(seat.get("status"), "AVAILABLE")).count();
-        long occupiedCount = seats.stream().filter(seat -> Objects.equals(seat.get("status"), "OCCUPIED")).count();
-        long itemCount = seats.stream().filter(seat -> Objects.equals(seat.get("status"), "ITEM")).count();
-        long reservedCount = seats.stream().filter(seat -> Objects.equals(seat.get("status"), "RESERVED")).count();
+        long availableCount = seats.stream().filter(seat -> Objects.equals(seat.getStatus(), "AVAILABLE")).count();
+        long occupiedCount = seats.stream().filter(seat -> Objects.equals(seat.getStatus(), "OCCUPIED")).count();
+        long squattingCount = seats.stream().filter(seat -> Objects.equals(seat.getStatus(), "SQUATTING") || Objects.equals(seat.getStatus(), "ABNORMAL")).count();
 
         return mapOf(
                 "summary", mapOf(
                         "totalSeats", seats.size(),
                         "availableSeats", availableCount,
                         "occupiedSeats", occupiedCount,
-                        "itemSeats", itemCount,
-                        "reservedSeats", reservedCount
+                        "squattingSeats", squattingCount
                 ),
                 "seats", seatItems
         );
@@ -118,13 +127,18 @@ public class AppService {
 
     public Map<String, Object> toggleSeatSelection(String token, String seatId) {
         Map<String, Object> user = requireUser(token);
-        Map<String, Object> seat = seatStore.findBySeatId(seatId)
+        Seat seat = seatRepository.findBySeatNum(parseSeatNumber(seatId))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "좌석을 찾을 수 없습니다."));
 
         String selectedSeatId = stringValue(user.get("selectedSeatId"));
         if (Objects.equals(selectedSeatId, seatId)) {
             user.put("selectedSeatId", null);
             studentAccountStore.save(user);
+            seat.setCheckedIn(false);
+            if (!seat.isOccupied()) {
+                seat.setStatus("AVAILABLE");
+            }
+            seatRepository.save(seat);
             deviceEventGateway.publishSeatStatusChanged(seatId, "RELEASED", mapOf("userId", user.get("id")));
             return mapOf(
                     "message", "좌석 선택이 취소되었습니다.",
@@ -132,19 +146,21 @@ public class AppService {
             );
         }
 
-        if (!Objects.equals(seat.get("status"), "AVAILABLE")) {
+        if (!Objects.equals(seat.getStatus(), "AVAILABLE")) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    seat.get("seatNumber") + "번 좌석은 " + seatStatusLabel(String.valueOf(seat.get("status"))) + " 상태입니다."
+                    seat.getSeatNum() + "번 좌석은 " + seatStatusLabel(seat.getStatus()) + " 상태입니다."
             );
         }
 
         user.put("selectedSeatId", seatId);
         studentAccountStore.save(user);
+        seat.setCheckedIn(true);
+        seatRepository.save(seat);
         seatStore.assignSeatToUser(seatId, String.valueOf(user.get("id")));
         deviceEventGateway.publishSeatStatusChanged(seatId, "SELECTED", mapOf("userId", user.get("id")));
         return mapOf(
-                "message", seat.get("seatNumber") + "번 좌석이 선택되었습니다.",
+                "message", seat.getSeatNum() + "번 좌석이 선택되었습니다.",
                 "selectedSeat", seatResponse(seat, seatId)
         );
     }
@@ -156,7 +172,7 @@ public class AppService {
             return mapOf("seat", null);
         }
 
-        Map<String, Object> seat = seatStore.findBySeatId(selectedSeatId).orElse(null);
+        Seat seat = seatRepository.findBySeatNum(parseSeatNumber(selectedSeatId)).orElse(null);
         return mapOf("seat", seat == null ? null : seatResponse(seat, selectedSeatId));
     }
 
@@ -216,13 +232,19 @@ public class AppService {
         );
     }
 
-    private Map<String, Object> seatResponse(Map<String, Object> seat, String selectedSeatId) {
+    private Map<String, Object> seatResponse(Seat seat, String selectedSeatId) {
+        String seatId = seatIdFromNumber(seat.getSeatNum());
         return mapOf(
-                "seatId", seat.get("seatId"),
-                "seatNumber", seat.get("seatNumber"),
-                "status", seat.get("status"),
-                "statusLabel", seatStatusLabel(String.valueOf(seat.get("status"))),
-                "selectedByCurrentUser", Objects.equals(seat.get("seatId"), selectedSeatId)
+                "seatId", seatId,
+                "seatNumber", seat.getSeatNum(),
+                "status", seat.getStatus(),
+                "statusLabel", seatStatusLabel(seat.getStatus()),
+                "checkedIn", seat.isCheckedIn(),
+                "posture", seat.getPosture() == null ? "정상" : seat.getPosture(),
+                "leftPressure", seat.getLeftPressure() == null ? 0 : seat.getLeftPressure(),
+                "rightPressure", seat.getRightPressure() == null ? 0 : seat.getRightPressure(),
+                "backPressure", seat.getBackPressure() == null ? 0 : seat.getBackPressure(),
+                "selectedByCurrentUser", Objects.equals(seatId, selectedSeatId)
         );
     }
 
@@ -230,8 +252,7 @@ public class AppService {
         return switch (status) {
             case "AVAILABLE" -> "빈 좌석";
             case "OCCUPIED" -> "사용 중";
-            case "ITEM" -> "물품";
-            case "RESERVED" -> "사유석 의심";
+            case "SQUATTING", "ABNORMAL" -> "사석화";
             default -> "알 수 없음";
         };
     }
@@ -254,5 +275,13 @@ public class AppService {
 
     private String stringValue(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private int parseSeatNumber(String seatId) {
+        return Integer.parseInt(seatId.replace("seat-", "").trim());
+    }
+
+    private String seatIdFromNumber(int seatNum) {
+        return "seat-" + seatNum;
     }
 }

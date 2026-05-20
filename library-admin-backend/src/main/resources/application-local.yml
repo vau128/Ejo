@@ -3,26 +3,28 @@ spring:
     activate:
       on-profile: local
   datasource:
-    url: jdbc:mysql://localhost:3306/library_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
-    username: library_user
-    password: root1234!
+    url: ${JDBC_DATABASE_URL:jdbc:mysql://localhost:3306/library_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
+    username: ${JDBC_DATABASE_USERNAME:library_user}
+    password: ${JDBC_DATABASE_PASSWORD:root1234!}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
+    database-platform: org.hibernate.dialect.MySQL8Dialect
     hibernate:
       ddl-auto: update
     show-sql: true
     properties:
       hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
         format_sql: true
 
 app:
   datasource:
     enabled: true
-    host: localhost
-    port: 3306
-    database: library_db
-    username: library_user
-    password: root1234!
+    host: ${DB_HOST:localhost}
+    port: ${DB_PORT:3306}
+    database: ${DB_NAME:library_db}
+    username: ${DB_USERNAME:library_user}
+    password: ${DB_PASSWORD:root1234!}
     ssl-mode: DISABLED
   iot:
     enabled: false

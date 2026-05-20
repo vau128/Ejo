@@ -4,6 +4,7 @@ import '../models/app_settings.dart';
 import '../models/lost_item_report.dart';
 import '../models/seat.dart';
 import '../models/student_user.dart';
+import '../models/warning_alert.dart';
 import 'app_api.dart';
 
 class AppState extends ChangeNotifier {
@@ -15,6 +16,7 @@ class AppState extends ChangeNotifier {
   bool _isBusy = false;
   List<Seat> _seats = const [];
   List<LostItemReport> _lostItemReports = const [];
+  List<WarningAlert> _warningAlerts = const [];
   AppSettings _settings = const AppSettings(
     pushEnabled: true,
     seatAlertEnabled: true,
@@ -28,6 +30,8 @@ class AppState extends ChangeNotifier {
   List<Seat> get seats => List<Seat>.unmodifiable(_seats);
   List<LostItemReport> get lostItemReports =>
       List<LostItemReport>.unmodifiable(_lostItemReports);
+  List<WarningAlert> get warningAlerts =>
+      List<WarningAlert>.unmodifiable(_warningAlerts);
   AppSettings get settings => _settings;
   String? get authErrorMessage => _authErrorMessage;
   int get warningCount => _currentUser?.warningCount ?? 0;
@@ -111,6 +115,7 @@ class AppState extends ChangeNotifier {
     _authErrorMessage = null;
     _seats = const [];
     _lostItemReports = const [];
+    _warningAlerts = const [];
     _settings = const AppSettings(
       pushEnabled: true,
       seatAlertEnabled: true,
@@ -125,10 +130,10 @@ class AppState extends ChangeNotifier {
         return '빈 좌석';
       case SeatStatus.occupied:
         return '사용 중';
-      case SeatStatus.item:
-        return '물품';
-      case SeatStatus.reserved:
-        return '사유석 의심';
+      case SeatStatus.squatting:
+        return '사석화';
+      case SeatStatus.abnormal:
+        return '비정상';
     }
   }
 
@@ -142,10 +147,10 @@ class AppState extends ChangeNotifier {
         return const Color(0xFFFBC02D);
       case SeatStatus.occupied:
         return const Color(0xFF757575);
-      case SeatStatus.item:
+      case SeatStatus.squatting:
         return const Color(0xFFD32F2F);
-      case SeatStatus.reserved:
-        return const Color(0xFFD32F2F);
+      case SeatStatus.abnormal:
+        return const Color(0xFF8E24AA);
     }
   }
 
@@ -180,6 +185,16 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<String?> refreshWarningAlerts() async {
+    try {
+      _warningAlerts = await _api.fetchWarnings();
+      notifyListeners();
+      return null;
+    } on AppApiException catch (error) {
+      return error.message;
+    }
+  }
+
   Future<String?> updatePushEnabled(bool value) async {
     return _saveSettings(_settings.copyWith(pushEnabled: value));
   }
@@ -201,6 +216,7 @@ class AppState extends ChangeNotifier {
     _currentUser = await _api.fetchCurrentUser(token);
     _seats = await _api.fetchSeats(token);
     _lostItemReports = await _api.fetchLostItems(token);
+    _warningAlerts = await _api.fetchWarnings();
     _settings = await _api.fetchSettings(token);
   }
 

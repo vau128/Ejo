@@ -4,15 +4,21 @@ import com.example.librarydashboard.dto.seat.AlertResponse;
 import com.example.librarydashboard.dto.seat.CheckInStatusResponse;
 import com.example.librarydashboard.dto.seat.LostItemResponse;
 import com.example.librarydashboard.dto.seat.LostItemSaveRequest;
+import com.example.librarydashboard.dto.seat.LostItemScanTriggerRequest;
 import com.example.librarydashboard.dto.seat.MessageResponse;
+import com.example.librarydashboard.dto.seat.PostureUpdateRequest;
 import com.example.librarydashboard.dto.seat.SeatSquattingRequest;
 import com.example.librarydashboard.dto.seat.SeatStatusUpdateRequest;
 import com.example.librarydashboard.dto.seat.SeatSummaryResponse;
+import com.example.librarydashboard.dto.seat.SquattingThresholdRequest;
+import com.example.librarydashboard.dto.seat.SquattingThresholdResponse;
+import com.example.librarydashboard.dto.seat.SquattingThresholdUpdateResponse;
 import com.example.librarydashboard.service.SeatApiService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -33,6 +39,11 @@ public class SeatController {
     @PostMapping("/seat/status")
     public MessageResponse updateSeatStatus(@Valid @RequestBody SeatStatusUpdateRequest request) {
         return seatApiService.updateSeatStatus(request);
+    }
+
+    @PostMapping("/seat/posture")
+    public MessageResponse updatePosture(@Valid @RequestBody PostureUpdateRequest request) {
+        return seatApiService.updatePosture(request);
     }
 
     @PostMapping("/seat/squatting")
@@ -60,9 +71,29 @@ public class SeatController {
         return seatApiService.getLostItems();
     }
 
+    @GetMapping("/warnings")
+    public List<AlertResponse> getWarnings() {
+        return seatApiService.getWarnings();
+    }
+
     @GetMapping("/alerts")
     public List<AlertResponse> getAlerts() {
-        return seatApiService.getAlerts();
+        return seatApiService.getWarnings();
+    }
+
+    @GetMapping("/settings/squatting-threshold")
+    public SquattingThresholdResponse getSquattingThreshold() {
+        return seatApiService.getSquattingThreshold();
+    }
+
+    @PostMapping("/admin/lost-item-scan")
+    public MessageResponse triggerLostItemScan(@Valid @RequestBody LostItemScanTriggerRequest request) {
+        return seatApiService.triggerLostItemScan(request);
+    }
+
+    @PutMapping("/settings/squatting-threshold")
+    public SquattingThresholdUpdateResponse updateSquattingThreshold(@Valid @RequestBody SquattingThresholdRequest request) {
+        return seatApiService.updateSquattingThreshold(request);
     }
 
     @GetMapping("/db-test")

@@ -51,8 +51,8 @@ export default function SeatsDashboardPage() {
       <div className="mx-auto max-w-6xl">
         <div className="app-card flex flex-col gap-4 px-6 py-5 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-500">6 Seat Realtime Dashboard</p>
-            <h1 className="mt-2 text-3xl font-semibold">학생 앱 / IoT 공용 6좌석 대시보드</h1>
+            <p className="text-sm uppercase tracking-[0.3em] text-slate-500">4 Seat Realtime Dashboard</p>
+            <h1 className="mt-2 text-3xl font-semibold">학생 앱 / IoT 공용 4좌석 대시보드</h1>
             <p className="mt-2 text-sm text-slate-500">
               {profile ? `${profile.name} · 경고 ${profile.warningCount}회` : '사용자 정보를 불러오는 중입니다.'}
             </p>
@@ -73,12 +73,12 @@ export default function SeatsDashboardPage() {
             <div className="mt-2 text-3xl font-semibold">{countByStatus(seats, 'OCCUPIED')}</div>
           </div>
           <div className="metric-card">
-            <div className="text-sm text-slate-500">물품 감지</div>
-            <div className="mt-2 text-3xl font-semibold">{countByStatus(seats, 'ITEM')}</div>
+            <div className="text-sm text-slate-500">사석화</div>
+            <div className="mt-2 text-3xl font-semibold">{countByStatus(seats, 'SQUATTING')}</div>
           </div>
           <div className="metric-card">
-            <div className="text-sm text-slate-500">사유석 의심</div>
-            <div className="mt-2 text-3xl font-semibold">{countByStatus(seats, 'RESERVED')}</div>
+            <div className="text-sm text-slate-500">비정상</div>
+            <div className="mt-2 text-3xl font-semibold">{countByStatus(seats, 'ABNORMAL')}</div>
           </div>
         </div>
 
@@ -89,7 +89,7 @@ export default function SeatsDashboardPage() {
           <div className="flex items-end justify-between gap-4">
             <div>
               <h2 className="text-2xl font-semibold">좌석 상태</h2>
-              <p className="mt-1 text-sm text-slate-500">IoT 상태가 seat-1부터 seat-6까지 반영됩니다.</p>
+              <p className="mt-1 text-sm text-slate-500">IoT 상태가 seat-1부터 seat-4까지 반영됩니다.</p>
             </div>
             <div className="text-sm text-slate-500">
               {selectedSeatId ? `현재 선택 좌석: ${selectedSeatId}` : '선택된 좌석 없음'}

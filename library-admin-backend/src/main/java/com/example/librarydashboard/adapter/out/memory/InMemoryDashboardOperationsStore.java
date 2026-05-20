@@ -125,12 +125,10 @@ public class InMemoryDashboardOperationsStore implements DashboardOperationsStor
     }
 
     private void seedSeats() {
-        seats.add(seat("seat-1", 1, "AVAILABLE", false, "정상 이용", 0, "pressure 0.00 / person 0 / object 0", 0.00, false, false, 0.75, "edge-rpi-01", "2026.03.27 17:05"));
-        seats.add(seat("seat-2", 2, "OCCUPIED", false, "정상 이용", 12, "pressure 0.82 / person 1 / object 0", 0.82, true, false, 0.94, "edge-rpi-01", "2026.03.27 17:10"));
-        seats.add(seat("seat-3", 3, "OBJECT_ONLY", true, "압력 미감지 상태에서 물품만 감지됨", 18, "pressure 0.04 / person 0 / object 1", 0.04, false, true, 0.87, "edge-rpi-02", "2026.03.27 17:15"));
-        seats.add(seat("seat-4", 4, "RESERVED", true, "사용 종료 후 장시간 자리 비움", 22, "pressure 0.00 / person 0 / object 0", 0.00, false, false, 0.79, "edge-rpi-02", "2026.03.27 17:20"));
-        seats.add(seat("seat-5", 5, "AVAILABLE", false, "정상 이용", 0, "pressure 0.00 / person 0 / object 0", 0.00, false, false, 0.74, "edge-rpi-03", "2026.03.27 17:25"));
-        seats.add(seat("seat-6", 6, "OCCUPIED", false, "정상 이용", 7, "pressure 0.78 / person 1 / object 0", 0.78, true, false, 0.90, "edge-rpi-03", "2026.03.27 17:30"));
+        seats.add(seat("seat-1", 1, "AVAILABLE", false, "정상 이용", 0, "left 0 / right 0 / back 0", 0.00, false, false, 0.75, "edge-rpi-01", "2026.03.27 17:05", false, "정상", 0, 0, 0));
+        seats.add(seat("seat-2", 2, "AVAILABLE", false, "정상 이용", 0, "left 0 / right 0 / back 0", 0.00, false, false, 0.75, "edge-rpi-01", "2026.03.27 17:05", false, "정상", 0, 0, 0));
+        seats.add(seat("seat-3", 3, "AVAILABLE", false, "정상 이용", 0, "left 0 / right 0 / back 0", 0.00, false, false, 0.75, "edge-rpi-02", "2026.03.27 17:05", false, "정상", 0, 0, 0));
+        seats.add(seat("seat-4", 4, "AVAILABLE", false, "정상 이용", 0, "left 0 / right 0 / back 0", 0.00, false, false, 0.75, "edge-rpi-02", "2026.03.27 17:05", false, "정상", 0, 0, 0));
     }
 
     private Map<String, Object> seat(
@@ -146,7 +144,12 @@ public class InMemoryDashboardOperationsStore implements DashboardOperationsStor
             boolean objectDetected,
             double cameraConfidence,
             String gateway,
-            String lastUpdated
+            String lastUpdated,
+            boolean checkedIn,
+            String posture,
+            int leftPressure,
+            int rightPressure,
+            int backPressure
     ) {
         return mapOf(
                 "seatId", seatId,
@@ -165,16 +168,16 @@ public class InMemoryDashboardOperationsStore implements DashboardOperationsStor
                 "personDetected", personDetected,
                 "objectDetected", objectDetected,
                 "cameraConfidence", cameraConfidence,
-                "gateway", gateway
+                "gateway", gateway,
+                "checkedIn", checkedIn,
+                "posture", posture,
+                "leftPressure", leftPressure,
+                "rightPressure", rightPressure,
+                "backPressure", backPressure
         );
     }
 
     private void seedAlertHistory() {
-        alertHistory.add(mapOf("id", "AL-1008", "seatId", "3A-07", "studentIdMasked", "2023****", "messageType", "경고 전송", "channel", "앱 푸시", "createdAt", "2026.03.27 17:18", "status", "전송 완료", "message", "장시간 자리 비움으로 경고 메시지를 전송했습니다."));
-        alertHistory.add(mapOf("id", "AL-1007", "seatId", "3C-02", "studentIdMasked", "2024****", "messageType", "경고 전송", "channel", "앱 푸시", "createdAt", "2026.03.27 17:10", "status", "전송 완료", "message", "물품 방치 의심 좌석에 대한 경고를 보냈습니다."));
-        alertHistory.add(mapOf("id", "AL-1006", "seatId", "3B-05", "studentIdMasked", "2022****", "messageType", "센서 점검 안내", "channel", "관리자 처리", "createdAt", "2026.03.27 16:53", "status", "전송 완료", "message", "센서 지연 이슈로 점검 안내를 등록했습니다."));
-        alertHistory.add(mapOf("id", "AL-1005", "seatId", "3D-04", "studentIdMasked", "2021****", "messageType", "경고 전송", "channel", "앱 푸시", "createdAt", "2026.03.27 16:35", "status", "전송 완료", "message", "장시간 비움 좌석으로 분류되어 알림을 보냈습니다."));
-        alertHistory.add(mapOf("id", "AL-1004", "seatId", "3D-07", "studentIdMasked", "2023****", "messageType", "처리 완료", "channel", "관리자 처리", "createdAt", "2026.03.27 15:51", "status", "전송 완료", "message", "현장 확인 후 처리 완료로 변경했습니다."));
     }
 
     private void seedAlertRules() {
@@ -186,10 +189,6 @@ public class InMemoryDashboardOperationsStore implements DashboardOperationsStor
     }
 
     private void seedLostItems() {
-        lostItems.add(mapOf("itemId", "LOST-101", "category", "전자기기", "foundAt", "2026.03.27 16:20", "zone", "3구역", "seatId", "3A-07", "description", "검정색 무선 이어폰 케이스", "status", "보관 중", "custodian", "관리자 김도윤"));
-        lostItems.add(mapOf("itemId", "LOST-102", "category", "문구", "foundAt", "2026.03.27 15:40", "zone", "3구역", "seatId", "3C-02", "description", "은색 샤프펜슬", "status", "보관 중", "custodian", "관리자 김도윤"));
-        lostItems.add(mapOf("itemId", "LOST-103", "category", "생활용품", "foundAt", "2026.03.27 14:30", "zone", "1구역", "seatId", "1B-12", "description", "파란색 텀블러", "status", "인계 완료", "custodian", "관리자 이나연"));
-        lostItems.add(mapOf("itemId", "LOST-104", "category", "전자기기", "foundAt", "2026.03.26 20:10", "zone", "2구역", "seatId", "2D-05", "description", "충전 케이블", "status", "보관 중", "custodian", "관리자 이나연"));
     }
 
     private void seedDevices() {
@@ -221,14 +220,15 @@ public class InMemoryDashboardOperationsStore implements DashboardOperationsStor
         settings.put("dashboardRefreshSeconds", 8);
         settings.put("sensorDelayThresholdSeconds", 5);
         settings.put("libraryMode", "NORMAL");
+        settings.put("squattingThresholdMinutes", 60);
     }
 
     private String statusLabel(String status) {
         return switch (status) {
             case "OCCUPIED" -> "사용 중";
             case "AVAILABLE" -> "비어있음";
-            case "OBJECT_ONLY" -> "물품 감지";
-            case "VACANT_LONG", "RESERVED" -> "사유석 의심";
+            case "SQUATTING" -> "사석화";
+            case "ABNORMAL" -> "비정상";
             case "SENSOR_DELAY" -> "센서 지연";
             default -> status;
         };

@@ -15,7 +15,7 @@ public class TemporaryCheckInStatusService implements CheckInStatusService {
     @Override
     public boolean isCheckedIn(int seatNum) {
         return seatRepository.findBySeatNum(seatNum)
-                .map(seat -> !"AVAILABLE".equals(seat.getStatus()) && !"EMPTY".equals(seat.getStatus()))
+                .map(seat -> seat.isCheckedIn())
                 .orElse(false);
     }
 }

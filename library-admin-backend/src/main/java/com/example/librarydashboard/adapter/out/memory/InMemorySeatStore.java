@@ -16,11 +16,9 @@ public class InMemorySeatStore implements SeatStore {
 
     public InMemorySeatStore() {
         seats.add(mapOf("seatId", "seat-1", "seatNumber", 1, "status", "AVAILABLE"));
-        seats.add(mapOf("seatId", "seat-2", "seatNumber", 2, "status", "OCCUPIED"));
-        seats.add(mapOf("seatId", "seat-3", "seatNumber", 3, "status", "ITEM"));
-        seats.add(mapOf("seatId", "seat-4", "seatNumber", 4, "status", "RESERVED"));
-        seats.add(mapOf("seatId", "seat-5", "seatNumber", 5, "status", "AVAILABLE"));
-        seats.add(mapOf("seatId", "seat-6", "seatNumber", 6, "status", "OCCUPIED"));
+        seats.add(mapOf("seatId", "seat-2", "seatNumber", 2, "status", "AVAILABLE"));
+        seats.add(mapOf("seatId", "seat-3", "seatNumber", 3, "status", "AVAILABLE"));
+        seats.add(mapOf("seatId", "seat-4", "seatNumber", 4, "status", "AVAILABLE"));
     }
 
     @Override

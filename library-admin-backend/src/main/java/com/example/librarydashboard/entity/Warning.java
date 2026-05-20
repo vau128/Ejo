@@ -26,6 +26,9 @@ public class Warning {
     @JoinColumn(name = "seat_id")
     private Seat seat;
 
+    @Column(name = "seat_num")
+    private Integer seatNum;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
@@ -42,20 +45,28 @@ public class Warning {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @Column(name = "warning_time")
+    private LocalDateTime warningTime;
+
     protected Warning() {
     }
 
-    public Warning(Seat seat, String warningType, String status, String message) {
+    public Warning(Seat seat, Integer seatNum, String warningType, String status, String message, LocalDateTime warningTime) {
         this.seat = seat;
+        this.seatNum = seatNum;
         this.warningType = warningType;
         this.status = status;
         this.message = message;
+        this.warningTime = warningTime;
     }
 
     @PrePersist
     void ensureCreatedAt() {
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
+        }
+        if (warningTime == null) {
+            warningTime = createdAt;
         }
     }
 
@@ -65,6 +76,10 @@ public class Warning {
 
     public Seat getSeat() {
         return seat;
+    }
+
+    public Integer getSeatNum() {
+        return seatNum;
     }
 
     public String getWarningType() {
@@ -81,5 +96,9 @@ public class Warning {
 
     public LocalDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public LocalDateTime getWarningTime() {
+        return warningTime;
     }
 }

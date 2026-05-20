@@ -52,7 +52,7 @@ export default function ZoneSeatsPage() {
 
   return (
     <div>
-      <PageHeader title="3구역 좌석 확인" description="사석화 상태와 현재 자세, 압력값을 한 번에 확인합니다." />
+      <PageHeader title="좌석 현황" description="4개 좌석의 사석화 상태와 현재 자세, 압력값을 한 번에 확인합니다." />
 
       <div className="grid gap-4 md:grid-cols-4">
         <MetricCard label="총 좌석 수" value={seats.length} helper="조회 API 기준" />

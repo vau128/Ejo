@@ -7,6 +7,7 @@ import '../models/app_settings.dart';
 import '../models/lost_item_report.dart';
 import '../models/seat.dart';
 import '../models/student_user.dart';
+import '../models/warning_alert.dart';
 
 class AppApiException implements Exception {
   const AppApiException(this.message);
@@ -113,6 +114,25 @@ class AppApi {
       },
     );
     return AppSettings.fromJson(_map(json['settings']));
+  }
+
+  Future<List<WarningAlert>> fetchWarnings() async {
+    final uri = Uri.parse('${ApiConfig.apiRootUrl}/warnings');
+    late final http.Response response;
+    try {
+      response = await http.get(uri, headers: const {'Accept': 'application/json'});
+    } catch (_) {
+      throw const AppApiException('알림을 불러오지 못했습니다.');
+    }
+
+    if (response.statusCode >= 400) {
+      throw const AppApiException('알림을 불러오지 못했습니다.');
+    }
+
+    final decoded = response.body.isEmpty ? const [] : jsonDecode(response.body) as List<dynamic>;
+    return decoded
+        .map((item) => WarningAlert.fromJson(_map(item)))
+        .toList();
   }
 
   Future<Map<String, dynamic>> _request(

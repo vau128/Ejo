@@ -5,9 +5,17 @@ spring:
   application:
     name: library-admin-backend
   profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
     default: local
   jpa:
     open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: Asia/Seoul
+  sql:
+    init:
+      mode: never
 
 app:
   auth:

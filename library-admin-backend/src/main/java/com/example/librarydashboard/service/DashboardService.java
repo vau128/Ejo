@@ -75,7 +75,7 @@ public class DashboardService {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("pendingWarnings", actionQueue.size());
         summary.put("pendingReleases", actionQueue.stream().filter(item -> !"처리 완료".equals(item.get("status"))).count());
-        summary.put("resolvedToday", 9);
+        summary.put("resolvedToday", 0);
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("summary", summary);
@@ -163,27 +163,26 @@ public class DashboardService {
 
     public Map<String, Object> getStatistics() {
         Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("peakUsageRate", "84%");
-        summary.put("seatTurnover", "3.1회");
-        summary.put("abnormalFrequency", "9건/일");
+        summary.put("peakUsageRate", "0%");
+        summary.put("seatTurnover", "0회");
+        summary.put("abnormalFrequency", "0건/일");
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("summary", summary);
         response.put("hourlyUsage", List.of(
-                point("09:00", 35), point("10:00", 52), point("11:00", 68), point("12:00", 61),
-                point("13:00", 78), point("14:00", 74), point("15:00", 84), point("16:00", 80),
-                point("17:00", 72), point("18:00", 59)
+                point("09:00", 0), point("10:00", 0), point("11:00", 0), point("12:00", 0),
+                point("13:00", 0), point("14:00", 0), point("15:00", 0), point("16:00", 0),
+                point("17:00", 0), point("18:00", 0)
         ));
         response.put("turnoverTrend", List.of(
-                point("09:00", 1), point("10:00", 2), point("11:00", 2), point("12:00", 3),
-                point("13:00", 2), point("14:00", 4), point("15:00", 4), point("16:00", 3),
-                point("17:00", 3), point("18:00", 2)
+                point("09:00", 0), point("10:00", 0), point("11:00", 0), point("12:00", 0),
+                point("13:00", 0), point("14:00", 0), point("15:00", 0), point("16:00", 0),
+                point("17:00", 0), point("18:00", 0)
         ));
         response.put("abnormalBreakdown", List.of(
-                mapOf("label", "물품 장기 방치", "value", 8, "rate", 80),
-                mapOf("label", "장시간 비움", "value", 6, "rate", 60),
-                mapOf("label", "센서 지연", "value", 4, "rate", 40),
-                mapOf("label", "카메라 재인식 필요", "value", 3, "rate", 30)
+                mapOf("label", "사석화", "value", 0, "rate", 0),
+                mapOf("label", "자세 이상", "value", 0, "rate", 0),
+                mapOf("label", "센서 지연", "value", 0, "rate", 0)
         ));
         return response;
     }
@@ -262,7 +261,7 @@ public class DashboardService {
                 .toList();
 
         Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("zoneName", "3구역");
+        summary.put("zoneName", "좌석 현황");
         summary.put("totalSeats", seats.size());
         summary.put("occupiedSeats", countByStatus(seats, "OCCUPIED"));
         summary.put("availableSeats", countByStatus(seats, "AVAILABLE"));

@@ -43,8 +43,21 @@ class MySeatScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            '현재 좌석은 모바일 앱에서 선택된 상태로 유지됩니다.',
+                            selectedSeat.checkedIn
+                                ? '현재 좌석은 체크인 상태로 유지됩니다.'
+                                : '아직 체크인되지 않은 좌석입니다.',
                             style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: 16),
+                          _InfoRow(label: '현재 자세', value: selectedSeat.posture),
+                          _InfoRow(
+                            label: '자세 안내',
+                            value: _postureGuide(selectedSeat.posture),
+                          ),
+                          _InfoRow(
+                            label: '압력값',
+                            value:
+                                '좌 ${selectedSeat.leftPressure} / 우 ${selectedSeat.rightPressure} / 등 ${selectedSeat.backPressure}',
                           ),
                         ],
                       ),
@@ -65,6 +78,42 @@ class MySeatScreen extends StatelessWidget {
                   ),
                 ],
               ),
+      ),
+    );
+  }
+
+  String _postureGuide(String posture) {
+    if (posture == '정상') {
+      return '바른 자세 유지 중';
+    }
+    return posture;
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 76,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ),
+          Expanded(child: Text(value)),
+        ],
       ),
     );
   }
