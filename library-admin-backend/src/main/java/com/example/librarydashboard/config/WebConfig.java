@@ -12,7 +12,7 @@ public class WebConfig implements WebMvcConfigurer {
 
     private final String[] allowedOriginPatterns;
 
-    public WebConfig(@Value("${app.cors.allowed-origin-patterns:http://localhost:5173,https://*.amplifyapp.com}") String allowedOriginPatterns) {
+    public WebConfig(@Value("${app.cors.allowed-origin-patterns:http://localhost:5173,https://*.amplifyapp.com,https://ssejo.site,https://www.ssejo.site,http://13.209.33.104}") String allowedOriginPatterns) {
         this.allowedOriginPatterns = Arrays.stream(allowedOriginPatterns.split(","))
                 .map(String::trim)
                 .filter(origin -> !origin.isEmpty())
