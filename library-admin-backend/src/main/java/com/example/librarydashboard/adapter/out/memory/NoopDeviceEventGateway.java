@@ -13,6 +13,10 @@ public class NoopDeviceEventGateway implements DeviceEventGateway {
     }
 
     @Override
+    public void publishCommand(String topic, Map<String, Object> payload) {
+    }
+
+    @Override
     public void recordHeartbeat(String deviceId, Map<String, Object> payload) {
     }
 }

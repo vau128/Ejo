@@ -16,6 +16,20 @@
 - `GET http://13.209.33.104/api/settings/squatting-threshold`
 - `PUT http://13.209.33.104/api/settings/squatting-threshold`
 
+## Backend -> IoT Commands
+
+- `POST /api/admin/lost-item-scan`
+  - Backend publish topic: `admin/trigger_lost_item`
+  - Payload: `{"command":"detect","triggeredAt":"..."}`
+- `PUT /api/settings/squatting-threshold`
+  - Backend publish topic: `admin/config/squatting_time`
+  - Payload: `{"limit_minutes":30,"triggeredAt":"..."}`
+
+## Notes
+
+- `POST /api/seat/posture` stores the seat update using the backend server time.
+- The incoming IoT `timestamp` is preserved as sensor time in `seat.posture_timestamp` and `posture_log.sensor_timestamp`.
+
 ## SQL
 
 ```sql

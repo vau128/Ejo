@@ -89,7 +89,8 @@ public class SeatApiService {
 
     public MessageResponse updatePosture(PostureUpdateRequest request) {
         Seat seat = ensureSeat(request.seatNum());
-        LocalDateTime timestamp = toLocalDateTime(request.timestamp());
+        LocalDateTime sensorTimestamp = toLocalDateTime(request.timestamp());
+        LocalDateTime serverTimestamp = LocalDateTime.now();
         int combinedPressure = request.leftPressure() + request.rightPressure() + request.backPressure();
         boolean occupied = request.leftPressure() > 0 || request.rightPressure() > 0 || request.backPressure() > 0;
 
@@ -98,12 +99,12 @@ public class SeatApiService {
         seat.setBackPressure(request.backPressure());
         seat.setPressure(combinedPressure);
         seat.setPosture(request.posture());
-        seat.setPostureTimestamp(timestamp);
+        seat.setPostureTimestamp(sensorTimestamp);
         seat.setOccupied(occupied);
         if (!"SQUATTING".equals(seat.getStatus()) && !"ABNORMAL".equals(seat.getStatus())) {
             seat.setStatus(baseStatusFor(seat.isCheckedIn(), occupied));
         }
-        seat.setUpdatedAt(timestamp);
+        seat.setUpdatedAt(serverTimestamp);
         seatRepository.save(seat);
 
         postureLogRepository.save(new PostureLog(
@@ -112,7 +113,7 @@ public class SeatApiService {
                 request.leftPressure(),
                 request.rightPressure(),
                 request.backPressure(),
-                timestamp
+                sensorTimestamp
         ));
 
         syncSeatToDashboard(seat);
@@ -160,7 +161,7 @@ public class SeatApiService {
     }
 
     public MessageResponse triggerLostItemScan(LostItemScanTriggerRequest request) {
-        deviceEventGateway.publishSeatStatusChanged("lost-item-scan", request.command(), Map.of(
+        deviceEventGateway.publishCommand("admin/trigger_lost_item", Map.of(
                 "command", request.command(),
                 "triggeredAt", LocalDateTime.now().toString()
         ));
@@ -234,6 +235,10 @@ public class SeatApiService {
         Map<String, Object> settings = dashboardOperationsStore.getSettings();
         settings.put("squattingThresholdMinutes", thresholdMinutes);
         dashboardOperationsStore.saveSettings(settings);
+        deviceEventGateway.publishCommand("admin/config/squatting_time", Map.of(
+                "limit_minutes", thresholdMinutes,
+                "triggeredAt", LocalDateTime.now().toString()
+        ));
         return new SquattingThresholdUpdateResponse("squatting threshold updated", thresholdMinutes);
     }
 
