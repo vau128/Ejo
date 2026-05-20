@@ -50,7 +50,7 @@ export default function SettingsPage() {
       try {
         const result = await getSquattingThreshold();
         if (!cancelled) {
-          setThresholdMinutes(result.threshold_minutes ?? 60);
+          setThresholdMinutes(result.thresholdMinutes ?? result.threshold_minutes ?? 60);
         }
       } catch {
       }
@@ -87,7 +87,10 @@ export default function SettingsPage() {
     setMessage('');
 
     try {
+      console.log('selected thresholdMinutes', thresholdMinutes);
       const result = await updateSquattingThreshold(thresholdMinutes);
+      const refreshed = await getSquattingThreshold();
+      setThresholdMinutes(refreshed.thresholdMinutes ?? refreshed.threshold_minutes ?? thresholdMinutes);
       setMessage(result.message || '사석화 기준 시간을 저장했습니다.');
     } catch (err) {
       setMessage(err.response?.data?.message || '사석화 기준 시간을 저장하지 못했습니다.');

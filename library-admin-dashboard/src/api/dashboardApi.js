@@ -111,13 +111,17 @@ export async function getSquattingThreshold() {
 }
 
 export async function updateSquattingThreshold(thresholdMinutes) {
-  const { data } = await client.put('/settings/squatting-threshold', {
-    threshold_minutes: thresholdMinutes,
-  });
+  const requestBody = {
+    thresholdMinutes,
+  };
+  console.log('updateSquattingThreshold requestBody', requestBody);
+  const { data } = await client.put('/settings/squatting-threshold', requestBody);
   return data;
 }
 
 export async function triggerLostItemScan() {
-  const { data } = await client.post('/admin/lost-item-scan', { command: 'detect' });
+  const requestBody = { command: 'detect' };
+  console.log('triggerLostItemScan requestBody', requestBody);
+  const { data } = await client.post('/admin/lost-item-scan', requestBody);
   return data;
 }

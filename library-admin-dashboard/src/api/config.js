@@ -4,4 +4,4 @@ export const apiBaseUrl = rawApiBaseUrl
   ? rawApiBaseUrl.endsWith('/api')
     ? rawApiBaseUrl
     : `${rawApiBaseUrl}/api`
-  : '';
+  : '/api';
