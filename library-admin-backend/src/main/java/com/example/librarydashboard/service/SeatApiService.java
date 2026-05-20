@@ -177,6 +177,7 @@ public class SeatApiService {
     public List<SeatSummaryResponse> getSeats() {
         bootstrapSeatsIfEmpty();
         return seatRepository.findAll().stream()
+                .filter(seat -> seat.getSeatNum() != null && seat.getSeatNum() >= 1 && seat.getSeatNum() <= 4)
                 .sorted((left, right) -> Integer.compare(left.getSeatNum(), right.getSeatNum()))
                 .map(seat -> new SeatSummaryResponse(
                         seat.getSeatNum(),

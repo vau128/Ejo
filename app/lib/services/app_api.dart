@@ -120,7 +120,10 @@ class AppApi {
     final uri = Uri.parse('${ApiConfig.apiRootUrl}/warnings');
     late final http.Response response;
     try {
-      response = await http.get(uri, headers: const {'Accept': 'application/json'});
+      response = await http.get(
+        uri,
+        headers: const {'Accept': 'application/json'},
+      );
     } catch (_) {
       throw const AppApiException('알림을 불러오지 못했습니다.');
     }
@@ -129,10 +132,10 @@ class AppApi {
       throw const AppApiException('알림을 불러오지 못했습니다.');
     }
 
-    final decoded = response.body.isEmpty ? const [] : jsonDecode(response.body) as List<dynamic>;
-    return decoded
-        .map((item) => WarningAlert.fromJson(_map(item)))
-        .toList();
+    final decoded = response.body.isEmpty
+        ? const []
+        : jsonDecode(response.body) as List<dynamic>;
+    return decoded.map((item) => WarningAlert.fromJson(_map(item))).toList();
   }
 
   Future<Map<String, dynamic>> _request(

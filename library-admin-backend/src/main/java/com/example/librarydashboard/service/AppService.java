@@ -104,6 +104,7 @@ public class AppService {
         String selectedSeatId = stringValue(user.get("selectedSeatId"));
         seatApiService.bootstrapSeatsIfEmpty();
         List<Seat> seats = seatRepository.findAll().stream()
+                .filter(seat -> seat.getSeatNum() != null && seat.getSeatNum() >= 1 && seat.getSeatNum() <= 4)
                 .sorted((left, right) -> Integer.compare(left.getSeatNum(), right.getSeatNum()))
                 .toList();
         List<Map<String, Object>> seatItems = seats.stream()

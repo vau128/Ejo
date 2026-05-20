@@ -22,10 +22,46 @@ class MockData {
   );
 
   static const List<Seat> initialSeats = [
-    Seat(id: 'seat-1', number: 1, status: SeatStatus.available, checkedIn: false, posture: '정상', leftPressure: 0, rightPressure: 0, backPressure: 0),
-    Seat(id: 'seat-2', number: 2, status: SeatStatus.available, checkedIn: false, posture: '정상', leftPressure: 0, rightPressure: 0, backPressure: 0),
-    Seat(id: 'seat-3', number: 3, status: SeatStatus.available, checkedIn: false, posture: '정상', leftPressure: 0, rightPressure: 0, backPressure: 0),
-    Seat(id: 'seat-4', number: 4, status: SeatStatus.available, checkedIn: false, posture: '정상', leftPressure: 0, rightPressure: 0, backPressure: 0),
+    Seat(
+      id: 'seat-1',
+      number: 1,
+      status: SeatStatus.available,
+      checkedIn: false,
+      posture: '정상',
+      leftPressure: 0,
+      rightPressure: 0,
+      backPressure: 0,
+    ),
+    Seat(
+      id: 'seat-2',
+      number: 2,
+      status: SeatStatus.available,
+      checkedIn: false,
+      posture: '정상',
+      leftPressure: 0,
+      rightPressure: 0,
+      backPressure: 0,
+    ),
+    Seat(
+      id: 'seat-3',
+      number: 3,
+      status: SeatStatus.available,
+      checkedIn: false,
+      posture: '정상',
+      leftPressure: 0,
+      rightPressure: 0,
+      backPressure: 0,
+    ),
+    Seat(
+      id: 'seat-4',
+      number: 4,
+      status: SeatStatus.available,
+      checkedIn: false,
+      posture: '정상',
+      leftPressure: 0,
+      rightPressure: 0,
+      backPressure: 0,
+    ),
   ];
 
   static final List<LostItemReport> lostItemReports = [];
