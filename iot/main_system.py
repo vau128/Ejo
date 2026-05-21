@@ -31,9 +31,6 @@ FASTAPI_LOST_ITEM_URL = f"{BASE_URL}/api/seat/lost-item"
 FASTAPI_POSTURE_URL = f"{BASE_URL}/api/seat/posture"
 FASTAPI_CHECKIN_STATUS_URL = f"{BASE_URL}/api/seat/check-in-status"
 
-# 라즈베리 파이 담당 좌석 번호 (CCTV 모드에서는 자동 계산하므로 주석 처리)
-# PI_SEAT_NUM = 2 
-
 # S3 클라이언트 초기화
 s3_client = boto3.client(
     's3',
@@ -62,12 +59,10 @@ def trigger_squatting(seat_num):
         print(f"[ERROR] Cannot connect to main server: {e}")
 
 # ----------------------------------------------------
-# [3. 분실물 탐지 및 좌표(ROI) 기반 다중 좌석 맵핑]
+# [3. 분실물 탐지 및 개별 크롭(Crop) 업로드 로직]
 # ----------------------------------------------------
 def check_lost_items():
     print("[CAMERA] Admin trigger received: Starting CCTV multi-seat scan!")
-    
-    local_filename = None 
     
     try:
         # 1. YOLO 모델 로드
@@ -87,12 +82,11 @@ def check_lost_items():
             print("[ERROR] Failed to capture image from RTSP stream.")
             return
 
-        # 3. 객체 탐지 수행
+        # 3. 객체 탐지 수행 (원본 frame에서 탐지)
         print("[YOLO] Running object detection on full CCTV view...")
         results = model(frame)
-        annotated_frame = results[0].plot() 
         
-        # 3-1. 객체 추출 및 좌표(ROI) 기반 좌석 맵핑 로직
+        # 3-1. 객체 추출 및 좌표, 종류 임시 저장
         detected_items_with_seats = []
         
         for box in results[0].boxes:
@@ -100,8 +94,8 @@ def check_lost_items():
             class_id = int(box.cls[0])
             category = results[0].names[class_id]
             
-            # 바운딩 박스 좌표 추출
-            x1, y1, x2, y2 = box.xyxy[0].tolist()
+            # 바운딩 박스 좌표 추출 (크롭을 위해 정수형 변환)
+            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
             x_center = (x1 + x2) / 2 # 물체의 중심 x 좌표
             
             # 화면을 4등분하여 좌석 번호 판별 (1, 2, 3, 4번 좌석)
@@ -116,7 +110,8 @@ def check_lost_items():
                 
             detected_items_with_seats.append({
                 "seat_num": detected_seat,
-                "category": category
+                "category": category,
+                "bbox": (x1, y1, x2, y2) # 자르기 위한 좌표 저장
             })
             
         # 중복 제거 (예: 1번 자리에 책이 2권 있어도 1번만 전송)
@@ -128,39 +123,47 @@ def check_lost_items():
                 seen.add(identifier)
                 unique_items.append(item)
                 
-        print(f"[YOLO] Mapped Items: {unique_items}")
+        print(f"[YOLO] Unique Mapped Items: {[f'Seat {i['seat_num']}: {i['category']}' for i in unique_items]}")
 
-        # 4. 임시 파일 저장
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        local_filename = f"lost_item_{timestamp}.jpg"
-        cv2.imwrite(local_filename, annotated_frame)
-        print(f"[LOCAL STORAGE] Image successfully saved: {local_filename}")
-        
-        s3_key = f"lost_items/{local_filename}"
-        s3_client.upload_file(
-            local_filename, BUCKET_NAME, s3_key,
-            ExtraArgs={'ACL': 'public-read', 'ContentType': 'image/jpeg'}
-        )
-        s3_url = f"https://{BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
-        print(f"[SUCCESS] S3 Upload successful! URL: {s3_url}")
-        
-        # 6. 메인 서버로 분실물 결과 개별 전송 (각자의 좌석 번호로 발송!)
-        print(f"[API] Sending lost item data to server one by one...")
-        
+        # 탐지된 물건이 없으면 여기서 바로 종료 (불필요한 동작 방지)
         if not unique_items:
-            print("[YOLO] No items detected. Skipping API call.")
-            
+            print("[YOLO] ✨ No items detected. Skipping S3 upload and API call.")
+            return 
+
+        # 4. 개별 이미지 크롭, S3 업로드 및 API 전송
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        print(f"[API] Processing and sending lost item data to server one by one...")
+        
         for item in unique_items:
+            # 4-1. 원본 이미지에서 해당 물건 영역만 크롭 (y좌표 먼저, x좌표 나중)
+            x1, y1, x2, y2 = item["bbox"]
+            cropped_img = frame[y1:y2, x1:x2]
+            
+            # 4-2. 개별 파일로 로컬에 저장
+            local_filename = f"lost_item_seat{item['seat_num']}_{item['category']}_{timestamp}.jpg"
+            cv2.imwrite(local_filename, cropped_img)
+            print(f"[LOCAL STORAGE] Cropped image saved: {local_filename}")
+            
+            # 4-3. S3에 개별 업로드
+            s3_key = f"lost_items/{local_filename}"
+            s3_client.upload_file(
+                local_filename, BUCKET_NAME, s3_key,
+                ExtraArgs={'ContentType': 'image/jpeg'}
+            )
+            s3_url = f"https://{BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
+            
+            # 4-4. 백엔드로 개별 S3 URL 전송
             lost_item_payload = {
-                "seat_num": item["seat_num"], # 계산된 실제 좌석 번호
-                "image_url": s3_url,          # 동일한 CCTV 전체 샷 이미지
-                "category": item["category"]  # 탐지된 물건 카테고리
+                "seat_num": item["seat_num"], 
+                "image_url": s3_url,         
+                "category": item["category"]  
             }
             
             api_response = requests.post(FASTAPI_LOST_ITEM_URL, json=lost_item_payload)
             
             if api_response.status_code == 200:
-                 print(f"[SUCCESS] Sent: Seat {item['seat_num']} -> {item['category']}")
+                 print(f"[SUCCESS] Sent S3 URL for Seat {item['seat_num']} -> {item['category']}")
             else:
                  print(f"[ERROR] Failed to send {item['category']}. HTTP Code: {api_response.status_code}")
         
@@ -168,7 +171,7 @@ def check_lost_items():
         print(f"[ERROR] Exception occurred: {e}")
         
     finally:
-        # 7. 메모리 강제 해제 (로컬 파일은 유지)
+        # 5. 메모리 강제 해제
         if 'model' in locals():
             del model
             print("[CLEANUP] YOLO model unloaded.")
