@@ -1,0 +1,51 @@
+spring:
+  config:
+    activate:
+      on-profile: local
+  datasource:
+    url: ${JDBC_DATABASE_URL:jdbc:mysql://localhost:3306/library_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
+    username: ${JDBC_DATABASE_USERNAME:library_user}
+    password: ${JDBC_DATABASE_PASSWORD:root1234!}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    database-platform: org.hibernate.dialect.MySQL8Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        format_sql: true
+
+app:
+  datasource:
+    enabled: true
+    host: ${DB_HOST:localhost}
+    port: ${DB_PORT:3306}
+    database: ${DB_NAME:library_db}
+    username: ${DB_USERNAME:library_user}
+    password: ${DB_PASSWORD:root1234!}
+    ssl-mode: DISABLED
+  iot:
+    enabled: false
+    base-url: http://iot-local
+    api-key: local-iot-key
+    request-timeout-ms: 3000
+    heartbeat-threshold-seconds: 30
+    mqtt:
+      enabled: false
+      broker-url: ${MQTT_BROKER_URL:tcp://localhost:1883}
+      client-id-prefix: ${MQTT_CLIENT_ID_PREFIX:library-admin-backend-local}
+      username: ${MQTT_USERNAME:}
+      password: ${MQTT_PASSWORD:}
+      qos: ${MQTT_QOS:1}
+  aws:
+    enabled: false
+    region: ap-northeast-2
+    s3-bucket: local-library-assets
+    access-key: replace-me
+    secret-key: replace-me
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

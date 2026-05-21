@@ -8,7 +8,7 @@ const titleMap = {
   '/alert-management': '알림 관리',
   '/settings': '설정',
   '/statistics': '통계',
-  '/zone-seats': '3구역 좌석 확인',
+  '/zone-seats': '좌석 현황',
   '/abnormal-seats': '비정상 좌석',
   '/lost-items': '분실물 관리보드',
   '/system-status': '시스템 상태 모니터링',

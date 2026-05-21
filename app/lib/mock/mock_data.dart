@@ -11,7 +11,7 @@ class MockData {
     name: '김도서',
     studentId: '20240001',
     email: 'student@library.com',
-    warningCount: 2,
+    warningCount: 0,
     agreedToPrivacy: true,
   );
 
@@ -22,35 +22,47 @@ class MockData {
   );
 
   static const List<Seat> initialSeats = [
-    Seat(id: 'seat-1', number: 1, status: SeatStatus.available),
-    Seat(id: 'seat-2', number: 2, status: SeatStatus.occupied),
-    Seat(id: 'seat-3', number: 3, status: SeatStatus.item),
-    Seat(id: 'seat-4', number: 4, status: SeatStatus.reserved),
-    Seat(id: 'seat-5', number: 5, status: SeatStatus.available),
-    Seat(id: 'seat-6', number: 6, status: SeatStatus.occupied),
+    Seat(
+      id: 'seat-1',
+      number: 1,
+      status: SeatStatus.available,
+      checkedIn: false,
+      posture: '정상',
+      leftPressure: 0,
+      rightPressure: 0,
+      backPressure: 0,
+    ),
+    Seat(
+      id: 'seat-2',
+      number: 2,
+      status: SeatStatus.available,
+      checkedIn: false,
+      posture: '정상',
+      leftPressure: 0,
+      rightPressure: 0,
+      backPressure: 0,
+    ),
+    Seat(
+      id: 'seat-3',
+      number: 3,
+      status: SeatStatus.available,
+      checkedIn: false,
+      posture: '정상',
+      leftPressure: 0,
+      rightPressure: 0,
+      backPressure: 0,
+    ),
+    Seat(
+      id: 'seat-4',
+      number: 4,
+      status: SeatStatus.available,
+      checkedIn: false,
+      posture: '정상',
+      leftPressure: 0,
+      rightPressure: 0,
+      backPressure: 0,
+    ),
   ];
 
-  static final List<LostItemReport> lostItemReports = [
-    LostItemReport(
-      id: 'report-1',
-      seatNumber: 2,
-      detectedAt: DateTime(2026, 4, 12, 9, 10),
-      imageUrl: 'assets/images/lost_item_1.png',
-      classificationStatus: '보류',
-    ),
-    LostItemReport(
-      id: 'report-2',
-      seatNumber: 3,
-      detectedAt: DateTime(2026, 4, 12, 11, 45),
-      imageUrl: 'assets/images/lost_item_2.png',
-      classificationStatus: '보류',
-    ),
-    LostItemReport(
-      id: 'report-3',
-      seatNumber: 6,
-      detectedAt: DateTime(2026, 4, 11, 18, 20),
-      imageUrl: 'assets/images/lost_item_3.png',
-      classificationStatus: '보류',
-    ),
-  ];
+  static final List<LostItemReport> lostItemReports = [];
 }

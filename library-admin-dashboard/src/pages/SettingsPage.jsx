@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getSettings, updateSettings } from '../api/dashboardApi';
+import { getSettings, getSquattingThreshold, updateSettings, updateSquattingThreshold } from '../api/dashboardApi';
 import MetricCard from '../components/MetricCard';
 import PageHeader from '../components/PageHeader';
 import SectionCard from '../components/SectionCard';
@@ -18,19 +18,49 @@ const defaultSettings = {
   dashboardRefreshSeconds: 10,
   sensorDelayThresholdSeconds: 5,
   libraryMode: 'NORMAL',
+  squattingThresholdMinutes: 60,
 };
+
+const thresholdOptions = [
+  { value: 10, label: '10초 (테스트)' },
+  { value: 30, label: '30분' },
+  { value: 60, label: '1시간' },
+  { value: 120, label: '2시간' },
+  { value: 240, label: '4시간' },
+];
 
 export default function SettingsPage() {
   const { data, loading, error, refetch } = useApiData(getSettings, []);
   const [form, setForm] = useState(defaultSettings);
+  const [thresholdMinutes, setThresholdMinutes] = useState(60);
   const [saving, setSaving] = useState(false);
+  const [thresholdSaving, setThresholdSaving] = useState(false);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     if (data?.settings) {
-      setForm(data.settings);
+      setForm((current) => ({ ...current, ...data.settings }));
     }
   }, [data]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadThreshold() {
+      try {
+        const result = await getSquattingThreshold();
+        if (!cancelled) {
+          setThresholdMinutes(result.thresholdMinutes ?? result.threshold_minutes ?? 60);
+        }
+      } catch {
+      }
+    }
+
+    loadThreshold();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const updateField = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -52,6 +82,23 @@ export default function SettingsPage() {
     }
   };
 
+  const handleThresholdSave = async () => {
+    setThresholdSaving(true);
+    setMessage('');
+
+    try {
+      console.log('selected thresholdMinutes', thresholdMinutes);
+      const result = await updateSquattingThreshold(thresholdMinutes);
+      const refreshed = await getSquattingThreshold();
+      setThresholdMinutes(refreshed.thresholdMinutes ?? refreshed.threshold_minutes ?? thresholdMinutes);
+      setMessage(result.message || '사석화 기준 시간을 저장했습니다.');
+    } catch (err) {
+      setMessage(err.response?.data?.message || '사석화 기준 시간을 저장하지 못했습니다.');
+    } finally {
+      setThresholdSaving(false);
+    }
+  };
+
   if (loading && !data) return <div className="app-card p-10 text-center text-sm text-slate-500">설정 데이터를 불러오는 중입니다.</div>;
   if (error && !data) return <div className="app-card p-10 text-center text-sm text-rose-600">{error}</div>;
 
@@ -59,17 +106,46 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title="설정"
-        description="알림 정책, 좌석 운영 기준, 시스템 갱신 주기를 관리합니다."
+        description="사석화 판정 시간과 운영 설정을 관리합니다."
         right={message ? <StatusBadge>{message.includes('못') ? '오류' : '정상'}</StatusBadge> : null}
       />
 
       <div className="grid gap-4 md:grid-cols-3">
+        <MetricCard label="사석화 기준" value={thresholdLabel(thresholdMinutes)} helper="관리자 설정값" accent="rose" />
         <MetricCard label="활성 자동화" value={data.summary.enabledAutomations} helper="현재 적용 중" accent="emerald" />
-        <MetricCard label="알림 채널" value={data.summary.activeChannels} helper="사용 가능한 채널" accent="brand" />
         <MetricCard label="대시보드 갱신" value={`${data.summary.refreshSeconds}초`} helper="자동 새로고침" accent="amber" />
       </div>
 
       <form onSubmit={handleSubmit} className="mt-6 grid gap-6 xl:grid-cols-3">
+        <SectionCard
+          title="사석화 판정 시간"
+          subtitle="발권 상태인데 사람이 없는 시간이 이 기준을 넘으면 사석화로 판단합니다."
+          action={
+            <button type="button" className="primary-button px-4 py-2 text-sm" disabled={thresholdSaving} onClick={handleThresholdSave}>
+              {thresholdSaving ? '저장 중' : '기준 저장'}
+            </button>
+          }
+        >
+          <div className="grid gap-4">
+            <Field label="판정 기준">
+              <select
+                className="input-base"
+                value={thresholdMinutes}
+                onChange={(event) => setThresholdMinutes(Number(event.target.value))}
+              >
+                {thresholdOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-800">
+              현재 기준: 발권 상태 + 사람 미감지 + {thresholdLabel(thresholdMinutes)} 이상 지속
+            </div>
+          </div>
+        </SectionCard>
+
         <SectionCard title="알림 설정" subtitle="관리자 알림 채널과 발송 제한 시간을 제어합니다.">
           <div className="grid gap-4">
             <ToggleRow
@@ -105,46 +181,9 @@ export default function SettingsPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="좌석 운영 기준" subtitle="사석화와 장시간 비움 기준을 조정합니다.">
-          <div className="grid gap-4">
-            <ToggleRow
-              label="자동 좌석 해제"
-              description="장시간 비움 상태를 넘기면 좌석을 자동 해제 대상으로 전환합니다."
-              checked={form.autoReleaseEnabled}
-              onChange={(checked) => updateField('autoReleaseEnabled', checked)}
-            />
-            <ToggleRow
-              label="분실물 자동 등록"
-              description="물품 감지 상태가 유지되면 분실물 큐에 자동 등록합니다."
-              checked={form.lostItemAutoRegisterEnabled}
-              onChange={(checked) => updateField('lostItemAutoRegisterEnabled', checked)}
-            />
-            <Field label="장시간 비움 기준 (분)">
-              <input
-                type="number"
-                min="5"
-                max="120"
-                className="input-base"
-                value={form.vacantSeatThresholdMinutes}
-                onChange={(event) => updateField('vacantSeatThresholdMinutes', Number(event.target.value))}
-              />
-            </Field>
-            <Field label="물품 감지 기준 (분)">
-              <input
-                type="number"
-                min="1"
-                max="60"
-                className="input-base"
-                value={form.objectDetectionThresholdMinutes}
-                onChange={(event) => updateField('objectDetectionThresholdMinutes', Number(event.target.value))}
-              />
-            </Field>
-          </div>
-        </SectionCard>
-
         <SectionCard
           title="시스템 운영"
-          subtitle="대시보드 반영 속도와 운영 모드를 관리합니다."
+          subtitle="기존 운영 설정은 유지하면서 센서 반영 주기를 조정합니다."
           action={
             <button type="submit" className="primary-button px-4 py-2 text-sm" disabled={saving}>
               {saving ? '저장 중' : '설정 저장'}
@@ -186,7 +225,7 @@ export default function SettingsPage() {
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
               <p className="font-semibold text-slate-800">현재 적용 요약</p>
               <p className="mt-2">운영 모드: {modeLabel(form.libraryMode)}</p>
-              <p className="mt-1">장시간 비움 기준: {form.vacantSeatThresholdMinutes}분</p>
+              <p className="mt-1">사석화 기준: {thresholdLabel(thresholdMinutes)}</p>
               <p className="mt-1">센서 지연 기준: {form.sensorDelayThresholdSeconds}초</p>
             </div>
           </div>
@@ -226,4 +265,12 @@ function modeLabel(value) {
     default:
       return '정상 운영';
   }
+}
+
+function thresholdLabel(value) {
+  const option = thresholdOptions.find((item) => item.value === value);
+  if (option) {
+    return option.label;
+  }
+  return value === 10 ? '10초 (테스트)' : `${value}분`;
 }

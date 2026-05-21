@@ -1,6 +1,0 @@
-com/example/librarydashboard/dto/AuthLoginRequest.class
-com/example/librarydashboard/service/AuthService.class
-com/example/librarydashboard/controller/DashboardController.class
-com/example/librarydashboard/controller/AuthController.class
-com/example/librarydashboard/LibraryAdminBackendApplication.class
-com/example/librarydashboard/config/WebConfig.class

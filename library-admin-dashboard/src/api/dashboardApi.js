@@ -89,3 +89,39 @@ export async function getSensorLogs() {
   const { data } = await client.get('/dashboard/system-status/sensor-logs');
   return data;
 }
+
+export async function getSeats() {
+  const { data } = await client.get('/seats');
+  return data;
+}
+
+export async function getSeatWarnings() {
+  const { data } = await client.get('/warnings');
+  return data;
+}
+
+export async function getLostItemsFeed() {
+  const { data } = await client.get('/lost-items');
+  return data;
+}
+
+export async function getSquattingThreshold() {
+  const { data } = await client.get('/settings/squatting-threshold');
+  return data;
+}
+
+export async function updateSquattingThreshold(thresholdMinutes) {
+  const requestBody = {
+    thresholdMinutes,
+  };
+  console.log('updateSquattingThreshold requestBody', requestBody);
+  const { data } = await client.put('/settings/squatting-threshold', requestBody);
+  return data;
+}
+
+export async function triggerLostItemScan() {
+  const requestBody = { command: 'detect' };
+  console.log('triggerLostItemScan requestBody', requestBody);
+  const { data } = await client.post('/admin/lost-item-scan', requestBody);
+  return data;
+}

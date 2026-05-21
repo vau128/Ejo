@@ -24,12 +24,12 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    final success = widget.appState.login(
+    final success = await widget.appState.login(
       email: _emailController.text,
       password: _passwordController.text,
     );
@@ -46,6 +46,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isBusy = widget.appState.isBusy;
 
     return Scaffold(
       body: SafeArea(
@@ -105,12 +106,20 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 24),
                         FilledButton(
-                          onPressed: _submit,
-                          child: const Text('학생 로그인'),
+                          onPressed: isBusy ? null : _submit,
+                          child: isBusy
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Text('학생 로그인'),
                         ),
                         const SizedBox(height: 12),
                         OutlinedButton(
-                          onPressed: () {
+                          onPressed: isBusy
+                              ? null
+                              : () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) =>
