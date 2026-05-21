@@ -20,12 +20,7 @@ class SeatSelectionScreen extends StatelessWidget {
         title: const Text('좌석 선택'),
         actions: [
           IconButton(
-            onPressed: () {
-              appState.refreshSeatStatuses();
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('상태가 새로고침되었습니다.')));
-            },
+            onPressed: () => _refreshSeats(context),
             icon: const Icon(Icons.refresh),
             tooltip: '상태 새로고침',
           ),
@@ -45,12 +40,7 @@ class SeatSelectionScreen extends StatelessWidget {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: FilledButton.icon(
-                      onPressed: () {
-                        appState.refreshSeatStatuses();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('상태가 새로고침되었습니다.')),
-                        );
-                      },
+                      onPressed: () => _refreshSeats(context),
                       icon: const Icon(Icons.refresh),
                       label: const Text('상태 새로고침'),
                     ),
@@ -91,27 +81,23 @@ class SeatSelectionScreen extends StatelessWidget {
     );
   }
 
-  void _handleSeatTap(BuildContext context, Seat seat) {
-    final message = appState.toggleSeatSelection(seat.id);
-
-    if (message == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('${seat.number}번 좌석이 선택되었습니다.')));
+  Future<void> _refreshSeats(BuildContext context) async {
+    final message = await appState.refreshSeatStatuses();
+    if (!context.mounted) {
       return;
     }
 
-    final isBlockedStatus =
-        seat.status == SeatStatus.occupied ||
-        seat.status == SeatStatus.item ||
-        seat.status == SeatStatus.reserved;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message ?? '상태가 새로고침되었습니다.')),
+    );
+  }
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-
-    if (isBlockedStatus) {
+  Future<void> _handleSeatTap(BuildContext context, Seat seat) async {
+    final message = await appState.toggleSeatSelection(seat.id);
+    if (!context.mounted || message == null) {
       return;
     }
+
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 }

@@ -1,0 +1,45 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT:3306}/${DB_NAME}?useSSL=${DB_USE_SSL:true}&allowPublicKeyRetrieval=${DB_ALLOW_PUBLIC_KEY_RETRIEVAL:false}&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: false
+
+app:
+  datasource:
+    enabled: true
+    host: ${DB_HOST}
+    port: ${DB_PORT:3306}
+    database: ${DB_NAME}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    ssl-mode: ${DB_SSL_MODE:REQUIRED}
+  iot:
+    enabled: true
+    base-url: ${IOT_BASE_URL}
+    api-key: ${IOT_API_KEY}
+    request-timeout-ms: ${IOT_TIMEOUT_MS:3000}
+    heartbeat-threshold-seconds: ${IOT_HEARTBEAT_THRESHOLD_SECONDS:30}
+    mqtt:
+      enabled: ${MQTT_ENABLED:true}
+      broker-url: ${MQTT_BROKER_URL:tcp://${MQTT_BROKER:localhost}:${MQTT_PORT:1883}}
+      client-id-prefix: ${MQTT_CLIENT_ID_PREFIX:library-admin-backend-prod}
+      username: ${MQTT_USERNAME:}
+      password: ${MQTT_PASSWORD:}
+      qos: ${MQTT_QOS:1}
+  aws:
+    enabled: true
+    region: ${AWS_REGION}
+    s3-bucket: ${AWS_S3_BUCKET}
+    access-key: ${AWS_ACCESS_KEY_ID}
+    secret-key: ${AWS_SECRET_ACCESS_KEY}

@@ -15,6 +15,17 @@ class StudentUser {
   final int warningCount;
   final bool agreedToPrivacy;
 
+  factory StudentUser.fromJson(Map<String, dynamic> json) {
+    return StudentUser(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      studentId: json['studentId'] as String,
+      email: json['email'] as String,
+      warningCount: json['warningCount'] as int? ?? 0,
+      agreedToPrivacy: json['agreedToPrivacy'] as bool? ?? false,
+    );
+  }
+
   StudentUser copyWith({
     String? id,
     String? name,

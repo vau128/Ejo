@@ -31,19 +31,28 @@ class SettingsScreen extends StatelessWidget {
                 SwitchListTile(
                   value: settings.pushEnabled,
                   title: const Text('푸시 알림 수신 여부'),
-                  onChanged: appState.updatePushEnabled,
+                  onChanged: (value) => _updateSetting(
+                    context,
+                    () => appState.updatePushEnabled(value),
+                  ),
                 ),
                 const Divider(height: 1),
                 SwitchListTile(
                   value: settings.seatAlertEnabled,
                   title: const Text('좌석 알림 수신 여부'),
-                  onChanged: appState.updateSeatAlertEnabled,
+                  onChanged: (value) => _updateSetting(
+                    context,
+                    () => appState.updateSeatAlertEnabled(value),
+                  ),
                 ),
                 const Divider(height: 1),
                 SwitchListTile(
                   value: settings.warningAlertEnabled,
                   title: const Text('경고 알림 수신 여부'),
-                  onChanged: appState.updateWarningAlertEnabled,
+                  onChanged: (value) => _updateSetting(
+                    context,
+                    () => appState.updateWarningAlertEnabled(value),
+                  ),
                 ),
               ],
             ),
@@ -51,5 +60,17 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _updateSetting(
+    BuildContext context,
+    Future<String?> Function() action,
+  ) async {
+    final message = await action();
+    if (!context.mounted || message == null) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 }

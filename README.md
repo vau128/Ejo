@@ -38,6 +38,10 @@
 - **사석화/분실물 자동 감지**: 앱 체크인 상태에서 센서 압력이 0인 상태가 45분 지속 시 사석화 확정 및 경고 알림 (FCM) 발송
 - **관리자 수동 트리거 (MQTT)**: 관리자 앱에서 '분실물 스캔' 버튼 클릭 시 MQTT 통신(`admin/trigger_lost_item`)을 통해 엣지 서버의 YOLO 비전 모델을 원격으로 즉시 가동
 - **S3 현장 증거 보존**: 객체 탐지 시 해당 시점의 좌석 캡처 이미지를 AWS S3 버킷에 자동 업로드하고, FastAPI 메인 서버로 URL을 즉각 전송하여 DB 최신화
+- 
+### 5. 데이터 전송 및 서비스 연동
+- **Spring Boot API 연동**: 관리자 대시보드와 학생 앱이 같은 백엔드 API를 사용
+- **React/Vite 관리자 웹 + Flutter 학생 앱**: 동일 좌석 상태를 웹과 앱에서 확인 가능
 
 <br>
 <br>
@@ -56,8 +60,8 @@
 
 ### Backend & Cloud
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
+![Amazon EC2](https://img.shields.io/badge/Amazon_EC2-FF9900?style=for-the-badge&logo=amazonec2&logoColor=white)
 ![Amazon S3](https://img.shields.io/badge/Amazon_S3-569A31?style=for-the-badge&logo=amazons3&logoColor=white)
 
 ### Frontend
@@ -65,10 +69,47 @@
 ![Flutter](https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white)
 ![Dart](https://img.shields.io/badge/Dart-0175C2?style=for-the-badge&logo=dart&logoColor=white)
 
-### Communication & Tools
-![MQTT](https://img.shields.io/badge/MQTT-660066?style=for-the-badge&logo=mqtt&logoColor=white)
-![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)
-![Notion](https://img.shields.io/badge/Notion-000000?style=for-the-badge&logo=notion&logoColor=white)
+<br>
+<br>
+
+## 프로젝트 구성
+
+- `library-admin-dashboard`: React/Vite 관리자 웹
+- `library-admin-backend`: Spring Boot 관리자/학생 공용 API
+- `app`: Flutter 학생 앱
+- `iot`: Raspberry Pi/ESP32 기반 Edge 컴퓨팅 로직
+
+## 빠른 실행
+
+```bash
+cd /Users/jiyun/development/Ejo
+make check-env
+make backend-dev
+make web-dev
+```
+
+앱은 별도 터미널에서 실행합니다.
+
+```bash
+cd /Users/jiyun/development/Ejo
+make app-get
+make app-run
+```
+
+## 빌드
+
+```bash
+cd /Users/jiyun/development/Ejo
+make backend-build
+make web-build
+make app-build-apk
+```
+
+## 개발 메모
+
+- React 프론트는 `web-dashboard`가 아니라 `library-admin-dashboard`를 사용합니다.
+- Android 에뮬레이터에서 로컬 백엔드 접속 시 `localhost` 대신 `10.0.2.2`를 사용해야 합니다.
+- 백엔드 `pom.xml`은 Java 17 기준입니다.
 
 <br>
 <br>
@@ -91,22 +132,22 @@
 
 ### 📌 Git Commit Convention
 팀원 간의 원활한 코드 리뷰와 히스토리 파악을 위해 아래의 커밋 메시지 규칙을 준수합니다.
-- 메시지 형식: `태그: 작업 내용` (예: `feat: 6개 좌석 통합 관리 딕셔너리 로직 구현`)
+- 메시지 형식: `태그: 작업 내용`
 
 | 태그 | 설명 |
 | :--- | :--- |
 | **feat** | 새로운 기능 추가 |
 | **fix** | 버그 수정 |
 | **design** | UI 디자인 수정 및 레이아웃 작업 |
-| **docs** | 문서 수정 (README, PRD, SRS, PPT 등) |
-| **refactor** | 코드 리팩토링 (기능 변경 없는 코드 구조 개선) |
-| **chore** | 빌드 업무, 패키지 매니저 설정, .gitignore 수정 등 |
+| **docs** | 문서 수정 |
+| **refactor** | 코드 리팩토링 |
+| **chore** | 빌드, 설정, `.gitignore` 수정 |
 | **test** | 테스트 코드 추가 및 리팩토링 |
 
 ### 🌿 Branch Strategy
-- **main**: 제품 출고 및 최종 발표용 브랜치 (가장 안정적인 버전)
+- **main**: 제품 출고 및 최종 발표용 브랜치
 - **develop**: 다음 출시 버전을 위한 개발 통합 브랜치
-- **feature/기능명**: 각 파트별 세부 기능 개발 브랜치 (예: `feature/iot`, `feature/app`)
+- **feature/기능명**: 각 파트별 세부 기능 개발 브랜치
 
 ### 🤝 Code Review & Merge
 - 모든 기능 개발은 `feature/` 브랜치에서 진행합니다.

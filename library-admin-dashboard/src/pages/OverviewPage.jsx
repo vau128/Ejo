@@ -26,7 +26,7 @@ export default function OverviewPage() {
       <PageHeader title="Overview" description="전체 현황과 주요 운영 항목을 한 화면에서 확인합니다." />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <MetricCard label="총 좌석 수" value={summary.totalSeats} helper="중앙도서관 전체" />
+        <MetricCard label="총 좌석 수" value={summary.totalSeats} helper="통합 테스트 기준 4석" />
         <MetricCard label="사용 좌석 수" value={summary.occupiedSeats} helper="실시간 점유" accent="emerald" />
         <MetricCard label="사용 가능" value={summary.availableSeats} helper="즉시 이용 가능" />
         <MetricCard label="비정상 좌석" value={summary.abnormalSeats} helper="확인 필요" accent="rose" />
@@ -81,8 +81,8 @@ export default function OverviewPage() {
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_1fr]">
         <SectionCard
-          title="3구역 좌석 확인"
-          subtitle="좌석 상태를 요약 형태로 확인합니다."
+          title="좌석 현황"
+          subtitle="4개 좌석의 현재 상태를 요약 형태로 확인합니다."
           action={<Link to="/zone-seats" className="secondary-button">좌석 상세 보기</Link>}
         >
           <div className="mb-5 flex flex-wrap gap-3 text-sm text-slate-500">

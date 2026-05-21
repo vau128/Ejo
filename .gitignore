@@ -1,0 +1,17 @@
+.DS_Store
+
+# Frontend
+library-admin-dashboard/node_modules/
+library-admin-dashboard/dist/
+library-admin-dashboard/.env
+
+# Backend
+library-admin-backend/target/
+
+# Python / IoT
+iot/__pycache__/
+*.pyc
+*.pt
+
+# Secrets
+*.pem

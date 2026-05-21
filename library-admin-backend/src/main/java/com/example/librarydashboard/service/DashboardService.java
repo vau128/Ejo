@@ -1,10 +1,16 @@
 package com.example.librarydashboard.service;
 
+import com.example.librarydashboard.dto.IotSeatStatusRequest;
 import com.example.librarydashboard.dto.SettingsUpdateRequest;
+import com.example.librarydashboard.port.out.DashboardOperationsStore;
+import com.example.librarydashboard.port.out.DeviceEventGateway;
+import com.example.librarydashboard.port.out.NotificationGateway;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,52 +19,49 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
-
 @Service
 public class DashboardService {
 
     private static final DateTimeFormatter HISTORY_FORMATTER = DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm", Locale.KOREAN);
 
-    private final List<Map<String, Object>> seats = new ArrayList<>();
-    private final List<Map<String, Object>> alertHistory = new ArrayList<>();
-    private final List<Map<String, Object>> alertRules = new ArrayList<>();
-    private final List<Map<String, Object>> lostItems = new ArrayList<>();
-    private final List<Map<String, Object>> devices = new ArrayList<>();
-    private final List<Map<String, Object>> sensorLogs = new ArrayList<>();
-    private final Map<String, Object> settings = new LinkedHashMap<>();
+    private final DashboardOperationsStore dashboardOperationsStore;
+    private final DeviceEventGateway deviceEventGateway;
+    private final NotificationGateway notificationGateway;
 
-    public DashboardService() {
-        seedSeats();
-        seedAlertHistory();
-        seedAlertRules();
-        seedLostItems();
-        seedDevices();
-        seedSensorLogs();
-        seedSettings();
+    public DashboardService(
+            DashboardOperationsStore dashboardOperationsStore,
+            DeviceEventGateway deviceEventGateway,
+            NotificationGateway notificationGateway
+    ) {
+        this.dashboardOperationsStore = dashboardOperationsStore;
+        this.deviceEventGateway = deviceEventGateway;
+        this.notificationGateway = notificationGateway;
     }
 
     public Map<String, Object> getOverview() {
+        List<Map<String, Object>> seats = dashboardOperationsStore.findAllSeats();
+        List<Map<String, Object>> alertHistory = dashboardOperationsStore.findAlertHistory();
+        List<Map<String, Object>> lostItems = dashboardOperationsStore.findLostItems();
+        List<Map<String, Object>> devices = dashboardOperationsStore.findDevices();
+
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("summary", buildSeatSummary(seats));
-        response.put("actionQueue", buildActionQueue().stream().limit(4).toList());
+        response.put("actionQueue", buildActionQueue(seats).stream().limit(4).toList());
         response.put("recentAlertHistory", alertHistory.stream().limit(4).toList());
 
         Map<String, Object> zonePreview = new LinkedHashMap<>();
         zonePreview.put("totalSeats", seats.size());
-        zonePreview.put("occupiedSeats", countByStatus("OCCUPIED"));
-        zonePreview.put("abnormalSeats", countAbnormalSeats());
+        zonePreview.put("occupiedSeats", countByStatus(seats, "OCCUPIED"));
+        zonePreview.put("abnormalSeats", countAbnormalSeats(seats));
         zonePreview.put("seats", seats.stream().limit(16).toList());
         response.put("zonePreview", zonePreview);
 
         response.put("lostItemsPreview", lostItems.stream().limit(3).toList());
 
         Map<String, Object> systemPreview = new LinkedHashMap<>();
-        systemPreview.put("connectedSensors", buildSystemSummary().get("sensorConnected"));
-        systemPreview.put("cameraOnline", buildSystemSummary().get("cameraOnline"));
-        systemPreview.put("delayedFeeds", buildSystemSummary().get("dataDelay"));
+        systemPreview.put("connectedSensors", buildSystemSummary(devices).get("sensorConnected"));
+        systemPreview.put("cameraOnline", buildSystemSummary(devices).get("cameraOnline"));
+        systemPreview.put("delayedFeeds", buildSystemSummary(devices).get("dataDelay"));
         systemPreview.put("devices", devices.stream().limit(3).toList());
         response.put("systemPreview", systemPreview);
 
@@ -66,14 +69,17 @@ public class DashboardService {
     }
 
     public Map<String, Object> getActions() {
+        List<Map<String, Object>> seats = dashboardOperationsStore.findAllSeats();
+        List<Map<String, Object>> actionQueue = buildActionQueue(seats);
+
         Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("pendingWarnings", buildActionQueue().size());
-        summary.put("pendingReleases", buildActionQueue().stream().filter(item -> !"처리 완료".equals(item.get("status"))).count());
-        summary.put("resolvedToday", 9);
+        summary.put("pendingWarnings", actionQueue.size());
+        summary.put("pendingReleases", actionQueue.stream().filter(item -> !"처리 완료".equals(item.get("status"))).count());
+        summary.put("resolvedToday", 0);
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("summary", summary);
-        response.put("queue", buildActionQueue());
+        response.put("queue", actionQueue);
         return response;
     }
 
@@ -81,8 +87,10 @@ public class DashboardService {
         Map<String, Object> seat = findSeat(seatId);
         seat.put("actionStatus", "경고 전송");
         seat.put("notes", "관리자 경고 발송 완료");
+        dashboardOperationsStore.saveSeat(seat);
         addHistory(seatId, "경고 전송", "앱 푸시", "전송 완료", "좌석 상태 이상으로 경고 메시지를 발송했습니다.");
         addSensorLog("ALERT_PUSH", seatId, "edge-rpi-03", "warn", "관리자 경고 메시지 전송", "정상");
+        notificationGateway.sendStudentNotification("masked-student", "좌석 경고", "좌석 상태 이상으로 경고가 발송되었습니다.", mapOf("seatId", seatId));
         return message("경고를 전송했습니다.");
     }
 
@@ -96,8 +104,10 @@ public class DashboardService {
         seat.put("issueType", "정상 상태 복구");
         seat.put("notes", "관리자 확인 후 사용 가능 처리");
         seat.put("lastUpdated", HISTORY_FORMATTER.format(LocalDateTime.now()));
+        dashboardOperationsStore.saveSeat(seat);
         addHistory(seatId, "상태 해제", "관리자 처리", "전송 완료", "관리자가 좌석 상태를 사용 가능으로 복구했습니다.");
         addSensorLog("SEAT_RELEASE", seatId, "edge-rpi-02", "release", "관리자 상태 해제 처리", "정상");
+        deviceEventGateway.publishSeatStatusChanged(seatId, "AVAILABLE", seat);
         return message("좌석 상태를 해제했습니다.");
     }
 
@@ -110,12 +120,15 @@ public class DashboardService {
             seat.put("status", "OCCUPIED");
             seat.put("statusLabel", statusLabel("OCCUPIED"));
         }
+        dashboardOperationsStore.saveSeat(seat);
         addHistory(seatId, "처리 완료", "관리자 처리", "전송 완료", "비정상 상태 확인 후 처리 완료로 변경했습니다.");
         addSensorLog("ISSUE_RESOLVED", seatId, "edge-rpi-01", "resolved", "현장 점검 후 처리 완료", "정상");
+        deviceEventGateway.publishSeatStatusChanged(seatId, String.valueOf(seat.get("status")), seat);
         return message("처리 완료로 변경했습니다.");
     }
 
     public Map<String, Object> getAlertHistory() {
+        List<Map<String, Object>> alertHistory = dashboardOperationsStore.findAlertHistory();
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("warningsSent", alertHistory.size());
         summary.put("resolvedAlerts", alertHistory.stream().filter(item -> Objects.equals(item.get("messageType"), "처리 완료")).count());
@@ -128,73 +141,66 @@ public class DashboardService {
     }
 
     public Map<String, Object> getAlertManagement() {
+        List<Map<String, Object>> alertRules = dashboardOperationsStore.findAlertRules();
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("enabledRules", alertRules.stream().filter(rule -> Boolean.TRUE.equals(rule.get("enabled"))).count());
         summary.put("disabledRules", alertRules.stream().filter(rule -> Boolean.FALSE.equals(rule.get("enabled"))).count());
-        summary.put("pendingTargets", buildAbnormalSeatRows().size());
+        summary.put("pushChannels", alertRules.stream().filter(rule -> Objects.equals(rule.get("channel"), "앱 푸시")).count());
 
-        Map<String, Object> response = new LinkedHashMap<>();
-        response.put("summary", summary);
-        response.put("rules", alertRules);
-        response.put("targets", buildAbnormalSeatRows().stream().map(row -> mapOf(
-                "seatId", row.get("seatId"),
-                "currentStatus", row.get("statusLabel"),
-                "triggerAt", row.get("detectedAt"),
-                "recommendedAction", row.get("actionStatus"),
-                "severity", row.get("severity")
-        )).toList());
-        return response;
+        return mapOf(
+                "summary", summary,
+                "rules", alertRules
+        );
     }
 
     public Map<String, Object> updateAlertRule(String ruleId, boolean enabled) {
-        Map<String, Object> rule = alertRules.stream()
-                .filter(item -> Objects.equals(item.get("ruleId"), ruleId))
-                .findFirst()
+        Map<String, Object> rule = dashboardOperationsStore.findAlertRuleById(ruleId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "알림 규칙을 찾을 수 없습니다."));
-
         rule.put("enabled", enabled);
+        dashboardOperationsStore.saveAlertRule(rule);
         return message("알림 규칙 상태를 변경했습니다.");
     }
 
     public Map<String, Object> getStatistics() {
         Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("peakUsageRate", "84%");
-        summary.put("seatTurnover", "3.1회");
-        summary.put("abnormalFrequency", "9건/일");
+        summary.put("peakUsageRate", "0%");
+        summary.put("seatTurnover", "0회");
+        summary.put("abnormalFrequency", "0건/일");
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("summary", summary);
         response.put("hourlyUsage", List.of(
-                point("09:00", 35), point("10:00", 52), point("11:00", 68), point("12:00", 61),
-                point("13:00", 78), point("14:00", 74), point("15:00", 84), point("16:00", 80),
-                point("17:00", 72), point("18:00", 59)
+                point("09:00", 0), point("10:00", 0), point("11:00", 0), point("12:00", 0),
+                point("13:00", 0), point("14:00", 0), point("15:00", 0), point("16:00", 0),
+                point("17:00", 0), point("18:00", 0)
         ));
         response.put("turnoverTrend", List.of(
-                point("09:00", 1), point("10:00", 2), point("11:00", 2), point("12:00", 3),
-                point("13:00", 2), point("14:00", 4), point("15:00", 4), point("16:00", 3),
-                point("17:00", 3), point("18:00", 2)
+                point("09:00", 0), point("10:00", 0), point("11:00", 0), point("12:00", 0),
+                point("13:00", 0), point("14:00", 0), point("15:00", 0), point("16:00", 0),
+                point("17:00", 0), point("18:00", 0)
         ));
         response.put("abnormalBreakdown", List.of(
-                mapOf("label", "물품 장기 방치", "value", 8, "rate", 80),
-                mapOf("label", "장시간 비움", "value", 6, "rate", 60),
-                mapOf("label", "센서 지연", "value", 4, "rate", 40),
-                mapOf("label", "카메라 재인식 필요", "value", 3, "rate", 30)
+                mapOf("label", "사석화", "value", 0, "rate", 0),
+                mapOf("label", "자세 이상", "value", 0, "rate", 0),
+                mapOf("label", "센서 지연", "value", 0, "rate", 0)
         ));
         return response;
     }
 
     public Map<String, Object> getSettings() {
+        Map<String, Object> settings = dashboardOperationsStore.getSettings();
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("summary", mapOf(
-                "enabledAutomations", countEnabledAutomations(),
-                "activeChannels", countActiveChannels(),
+                "enabledAutomations", countEnabledAutomations(settings),
+                "activeChannels", countActiveChannels(settings),
                 "refreshSeconds", settings.get("dashboardRefreshSeconds")
         ));
-        response.put("settings", new LinkedHashMap<>(settings));
+        response.put("settings", settings);
         return response;
     }
 
     public Map<String, Object> updateSettings(SettingsUpdateRequest request) {
+        Map<String, Object> settings = dashboardOperationsStore.getSettings();
         settings.put("pushAlertsEnabled", request.pushAlertsEnabled());
         settings.put("smsAlertsEnabled", request.smsAlertsEnabled());
         settings.put("quietHoursStart", request.quietHoursStart());
@@ -206,22 +212,60 @@ public class DashboardService {
         settings.put("dashboardRefreshSeconds", request.dashboardRefreshSeconds());
         settings.put("sensorDelayThresholdSeconds", request.sensorDelayThresholdSeconds());
         settings.put("libraryMode", request.libraryMode());
+        dashboardOperationsStore.saveSettings(settings);
         addSensorLog("SETTINGS_UPDATED", "ADMIN", "dashboard-web", request.libraryMode(), "관리자 설정이 업데이트되었습니다.", "정상");
         return message("설정을 저장했습니다.");
     }
 
+    public Map<String, Object> updateSeatStatusFromIot(IotSeatStatusRequest request) {
+        Map<String, Object> seat = dashboardOperationsStore.findSeatById(request.seatId())
+                .orElseGet(() -> createSeatShell(request.seatId()));
+
+        String normalizedStatus = normalizeIotStatus(request.status());
+        boolean abnormal = isAbnormalStatus(normalizedStatus);
+        seat.put("seatId", request.seatId());
+        seat.put("status", normalizedStatus);
+        seat.put("statusLabel", statusLabel(normalizedStatus));
+        seat.put("lastUpdated", request.updateTime());
+        seat.put("detectedAt", request.updateTime());
+        seat.put("abnormal", abnormal);
+        seat.put("actionStatus", abnormal ? "대기" : "정상");
+        seat.put("notes", request.status());
+        seat.put("issueType", request.status());
+        if (request.imageUrl() != null && !request.imageUrl().isBlank()) {
+            seat.put("imageUrl", request.imageUrl());
+        }
+        dashboardOperationsStore.saveSeat(seat);
+
+        addSensorLog(
+                eventTypeForStatus(normalizedStatus),
+                request.seatId(),
+                "edge-local",
+                request.status(),
+                "로컬 IoT 상태 업데이트",
+                abnormal ? "지연" : "정상"
+        );
+
+        return mapOf(
+                "message", "IoT 좌석 상태를 반영했습니다.",
+                "seatId", request.seatId(),
+                "status", normalizedStatus
+        );
+    }
+
     public Map<String, Object> getZoneSeats(String status, String search) {
+        List<Map<String, Object>> seats = dashboardOperationsStore.findAllSeats();
         List<Map<String, Object>> filtered = seats.stream()
                 .filter(seat -> status == null || status.isBlank() || Objects.equals(seat.get("status"), status))
                 .filter(seat -> search == null || search.isBlank() || String.valueOf(seat.get("seatId")).toLowerCase().contains(search.toLowerCase()))
                 .toList();
 
         Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("zoneName", "3구역");
+        summary.put("zoneName", "좌석 현황");
         summary.put("totalSeats", seats.size());
-        summary.put("occupiedSeats", countByStatus("OCCUPIED"));
-        summary.put("availableSeats", countByStatus("AVAILABLE"));
-        summary.put("abnormalSeats", countAbnormalSeats());
+        summary.put("occupiedSeats", countByStatus(seats, "OCCUPIED"));
+        summary.put("availableSeats", countByStatus(seats, "AVAILABLE"));
+        summary.put("abnormalSeats", countAbnormalSeats(seats));
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("summary", summary);
@@ -249,24 +293,26 @@ public class DashboardService {
     }
 
     public Map<String, Object> getAbnormalSeats() {
+        List<Map<String, Object>> seats = dashboardOperationsStore.findAllSeats();
         Map<String, Object> summary = new LinkedHashMap<>();
-        summary.put("abnormalCount", countAbnormalSeats());
-        summary.put("objectOnly", countByStatus("OBJECT_ONLY"));
-        summary.put("vacantLong", countByStatus("VACANT_LONG"));
-        summary.put("sensorDelay", countByStatus("SENSOR_DELAY"));
+        summary.put("abnormalCount", countAbnormalSeats(seats));
+        summary.put("objectOnly", countByStatus(seats, "OBJECT_ONLY"));
+        summary.put("vacantLong", countByStatus(seats, "VACANT_LONG"));
+        summary.put("sensorDelay", countByStatus(seats, "SENSOR_DELAY"));
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("summary", summary);
         response.put("breakdown", List.of(
-                mapOf("label", "물품 감지", "value", countByStatus("OBJECT_ONLY")),
-                mapOf("label", "장시간 비움", "value", countByStatus("VACANT_LONG")),
-                mapOf("label", "센서 지연", "value", countByStatus("SENSOR_DELAY"))
+                mapOf("label", "물품 감지", "value", countByStatus(seats, "OBJECT_ONLY")),
+                mapOf("label", "장시간 비움", "value", countByStatus(seats, "VACANT_LONG")),
+                mapOf("label", "센서 지연", "value", countByStatus(seats, "SENSOR_DELAY"))
         ));
-        response.put("rows", buildAbnormalSeatRows());
+        response.put("rows", buildAbnormalSeatRows(seats));
         return response;
     }
 
     public Map<String, Object> getLostItems() {
+        List<Map<String, Object>> lostItems = dashboardOperationsStore.findLostItems();
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("openCount", lostItems.stream().filter(item -> Objects.equals(item.get("status"), "보관 중")).count());
         summary.put("claimedToday", lostItems.stream().filter(item -> Objects.equals(item.get("status"), "인계 완료")).count());
@@ -279,29 +325,29 @@ public class DashboardService {
     }
 
     public Map<String, Object> updateLostItemStatus(String itemId, String status) {
-        Map<String, Object> item = lostItems.stream()
-                .filter(lostItem -> Objects.equals(lostItem.get("itemId"), itemId))
-                .findFirst()
+        Map<String, Object> item = dashboardOperationsStore.findLostItemById(itemId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "분실물을 찾을 수 없습니다."));
         item.put("status", status);
+        dashboardOperationsStore.saveLostItem(item);
         return message("분실물 상태를 변경했습니다.");
     }
 
     public Map<String, Object> getSystemStatus() {
+        List<Map<String, Object>> devices = dashboardOperationsStore.findDevices();
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put("summary", buildSystemSummary());
+        response.put("summary", buildSystemSummary(devices));
         response.put("devices", devices);
         return response;
     }
 
     public Map<String, Object> getSensorLogs() {
-    List<Map<String, Object>> sortedLogs = sensorLogs.stream()
-            .sorted(Comparator.comparing((Map<String, Object> item) -> String.valueOf(item.get("timestamp"))).reversed())
-            .toList();
-    return mapOf("logs", sortedLogs);
-}
+        List<Map<String, Object>> sortedLogs = dashboardOperationsStore.findSensorLogs().stream()
+                .sorted(Comparator.comparing((Map<String, Object> item) -> String.valueOf(item.get("timestamp"))).reversed())
+                .toList();
+        return mapOf("logs", sortedLogs);
+    }
 
-    private Map<String, Object> buildSystemSummary() {
+    private Map<String, Object> buildSystemSummary(List<Map<String, Object>> devices) {
         long sensorConnected = devices.stream().filter(device -> Objects.equals(device.get("status"), "정상")).count();
         long cameraOnline = devices.stream().filter(device -> Objects.equals(device.get("type"), "Camera") && !Objects.equals(device.get("status"), "오프라인")).count();
         long dataDelay = devices.stream().filter(device -> Objects.equals(device.get("status"), "지연")).count();
@@ -313,18 +359,18 @@ public class DashboardService {
         );
     }
 
-    private Map<String, Object> buildSeatSummary(List<Map<String, Object>> source) {
+    private Map<String, Object> buildSeatSummary(List<Map<String, Object>> seats) {
         return mapOf(
-                "totalSeats", source.size(),
-                "occupiedSeats", countByStatus("OCCUPIED"),
-                "availableSeats", countByStatus("AVAILABLE"),
-                "abnormalSeats", countAbnormalSeats(),
-                "alertsToday", alertHistory.size(),
-                "openLostItems", lostItems.stream().filter(item -> Objects.equals(item.get("status"), "보관 중")).count()
+                "totalSeats", seats.size(),
+                "occupiedSeats", countByStatus(seats, "OCCUPIED"),
+                "availableSeats", countByStatus(seats, "AVAILABLE"),
+                "abnormalSeats", countAbnormalSeats(seats),
+                "alertsToday", dashboardOperationsStore.findAlertHistory().size(),
+                "openLostItems", dashboardOperationsStore.findLostItems().stream().filter(item -> Objects.equals(item.get("status"), "보관 중")).count()
         );
     }
 
-    private List<Map<String, Object>> buildActionQueue() {
+    private List<Map<String, Object>> buildActionQueue(List<Map<String, Object>> seats) {
         return seats.stream()
                 .filter(seat -> Boolean.TRUE.equals(seat.get("abnormal")))
                 .map(seat -> mapOf(
@@ -338,7 +384,7 @@ public class DashboardService {
                 .toList();
     }
 
-    private List<Map<String, Object>> buildAbnormalSeatRows() {
+    private List<Map<String, Object>> buildAbnormalSeatRows(List<Map<String, Object>> seats) {
         return seats.stream()
                 .filter(seat -> Boolean.TRUE.equals(seat.get("abnormal")))
                 .map(seat -> mapOf(
@@ -352,15 +398,15 @@ public class DashboardService {
                 .toList();
     }
 
-    private long countByStatus(String status) {
+    private long countByStatus(List<Map<String, Object>> seats, String status) {
         return seats.stream().filter(seat -> Objects.equals(seat.get("status"), status)).count();
     }
 
-    private long countAbnormalSeats() {
+    private long countAbnormalSeats(List<Map<String, Object>> seats) {
         return seats.stream().filter(seat -> Boolean.TRUE.equals(seat.get("abnormal"))).count();
     }
 
-    private long countEnabledAutomations() {
+    private long countEnabledAutomations(Map<String, Object> settings) {
         return List.of(
                 settings.get("pushAlertsEnabled"),
                 settings.get("smsAlertsEnabled"),
@@ -369,7 +415,7 @@ public class DashboardService {
         ).stream().filter(Boolean.TRUE::equals).count();
     }
 
-    private long countActiveChannels() {
+    private long countActiveChannels(Map<String, Object> settings) {
         return List.of(settings.get("pushAlertsEnabled"), settings.get("smsAlertsEnabled"))
                 .stream()
                 .filter(Boolean.TRUE::equals)
@@ -378,23 +424,72 @@ public class DashboardService {
 
     private String severityForStatus(String status) {
         return switch (status) {
-            case "OBJECT_ONLY" -> "주의";
-            case "VACANT_LONG" -> "긴급";
+            case "OBJECT_ONLY", "ITEM" -> "주의";
+            case "VACANT_LONG", "RESERVED" -> "긴급";
             case "SENSOR_DELAY" -> "지연";
             default -> "확인";
         };
     }
 
+    private Map<String, Object> createSeatShell(String seatId) {
+        return new LinkedHashMap<>(mapOf(
+                "seatId", seatId,
+                "status", "AVAILABLE",
+                "statusLabel", statusLabel("AVAILABLE"),
+                "lastUpdated", HISTORY_FORMATTER.format(LocalDateTime.now()),
+                "notes", "로컬 IoT 테스트 좌석",
+                "abnormal", false,
+                "issueType", "정상 이용",
+                "detectedAt", HISTORY_FORMATTER.format(LocalDateTime.now()),
+                "durationMinutes", 0,
+                "sensorHint", "mqtt local test",
+                "actionStatus", "정상",
+                "pressureValue", 0.0,
+                "personDetected", false,
+                "objectDetected", false,
+                "cameraConfidence", 0.0,
+                "gateway", "edge-local"
+        ));
+    }
+
+    private String normalizeIotStatus(String status) {
+        return switch (status) {
+            case "정상 사용중" -> "OCCUPIED";
+            case "정상 빈좌석" -> "AVAILABLE";
+            case "사석화 의심 (자리비움)", "사석화 확정" -> "VACANT_LONG";
+            case "분실물 확인 중", "분실물 확정" -> "OBJECT_ONLY";
+            case "사석화 (퇴실후 미퇴거)" -> "RESERVED";
+            default -> status;
+        };
+    }
+
+    private boolean isAbnormalStatus(String status) {
+        return switch (status) {
+            case "OBJECT_ONLY", "VACANT_LONG", "SENSOR_DELAY", "RESERVED" -> true;
+            default -> false;
+        };
+    }
+
+    private String eventTypeForStatus(String status) {
+        return switch (status) {
+            case "OCCUPIED" -> "OCCUPIED";
+            case "AVAILABLE" -> "AVAILABLE";
+            case "OBJECT_ONLY" -> "OBJECT_ONLY";
+            case "VACANT_LONG" -> "VACANT_LONG";
+            case "RESERVED" -> "CHECKOUT_ITEM";
+            default -> "IOT_STATUS";
+        };
+    }
+
     private Map<String, Object> findSeat(String seatId) {
-        return seats.stream()
-                .filter(seat -> Objects.equals(seat.get("seatId"), seatId))
-                .findFirst()
+        return dashboardOperationsStore.findSeatById(seatId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "좌석을 찾을 수 없습니다."));
     }
 
     private void addHistory(String seatId, String messageType, String channel, String status, String message) {
-        alertHistory.add(0, mapOf(
-                "id", "AL-" + (1000 + alertHistory.size() + 1),
+        int nextSequence = dashboardOperationsStore.findAlertHistory().size() + 1001;
+        dashboardOperationsStore.prependAlertHistory(mapOf(
+                "id", "AL-" + nextSequence,
                 "seatId", seatId,
                 "studentIdMasked", "2023****",
                 "messageType", messageType,
@@ -406,7 +501,7 @@ public class DashboardService {
     }
 
     private void addSensorLog(String eventType, String seatId, String deviceId, String value, String message, String status) {
-        sensorLogs.add(0, mapOf(
+        dashboardOperationsStore.prependSensorLog(mapOf(
                 "id", UUID.randomUUID().toString(),
                 "timestamp", HISTORY_FORMATTER.format(LocalDateTime.now()),
                 "deviceId", deviceId,
@@ -426,140 +521,11 @@ public class DashboardService {
         return switch (status) {
             case "OCCUPIED" -> "사용 중";
             case "AVAILABLE" -> "비어있음";
-            case "OBJECT_ONLY" -> "물품 감지";
-            case "VACANT_LONG" -> "장시간 비움";
+            case "OBJECT_ONLY", "ITEM" -> "물품 감지";
+            case "VACANT_LONG", "RESERVED" -> "사유석 의심";
             case "SENSOR_DELAY" -> "센서 지연";
             default -> status;
         };
-    }
-
-    private void seedSeats() {
-        String[] rows = {"A", "B", "C", "D", "E"};
-        for (String row : rows) {
-            for (int number = 1; number <= 8; number++) {
-                String seatId = "3" + row + "-0" + number;
-                String status = number % 3 == 0 ? "AVAILABLE" : "OCCUPIED";
-                boolean abnormal = false;
-                String issueType = "정상 이용";
-                int durationMinutes = number * 4;
-                String sensorHint = "pressure 0.81 / person 1 / object 0";
-                double pressureValue = 0.81;
-                boolean personDetected = true;
-                boolean objectDetected = false;
-                double cameraConfidence = 0.94;
-                String gateway = "edge-rpi-01";
-
-                if (List.of("3A-03", "3C-02", "3D-07").contains(seatId)) {
-                    status = "OBJECT_ONLY";
-                    abnormal = true;
-                    issueType = "압력 미감지 상태에서 물품만 감지됨";
-                    durationMinutes = 18;
-                    sensorHint = "pressure 0.04 / person 0 / object 1";
-                    pressureValue = 0.04;
-                    personDetected = false;
-                    objectDetected = true;
-                    cameraConfidence = 0.87;
-                    gateway = "edge-rpi-03";
-                }
-                if (List.of("3A-07", "3D-04").contains(seatId)) {
-                    status = "VACANT_LONG";
-                    abnormal = true;
-                    issueType = "사용 종료 후 장시간 자리 비움";
-                    durationMinutes = 22;
-                    sensorHint = "pressure 0.00 / person 0 / object 0";
-                    pressureValue = 0.00;
-                    personDetected = false;
-                    objectDetected = false;
-                    cameraConfidence = 0.79;
-                    gateway = "edge-rpi-02";
-                }
-                if (List.of("3B-05", "3E-06").contains(seatId)) {
-                    status = "SENSOR_DELAY";
-                    abnormal = true;
-                    issueType = "센서 응답 지연 또는 게이트웨이 재전송 발생";
-                    durationMinutes = 11;
-                    sensorHint = "latency 1450ms / retry 3";
-                    pressureValue = 0.23;
-                    personDetected = false;
-                    objectDetected = false;
-                    cameraConfidence = 0.55;
-                    gateway = "edge-rpi-04";
-                }
-
-                seats.add(mapOf(
-                        "seatId", seatId,
-                        "status", status,
-                        "statusLabel", statusLabel(status),
-                        "lastUpdated", "2026.03.27 17:" + String.format("%02d", (number * 5) % 60),
-                        "notes", abnormal ? "관리자 확인 필요" : "정상 이용 중",
-                        "abnormal", abnormal,
-                        "issueType", issueType,
-                        "detectedAt", "2026.03.27 17:" + String.format("%02d", (number * 3) % 60),
-                        "durationMinutes", durationMinutes,
-                        "sensorHint", sensorHint,
-                        "actionStatus", abnormal ? "대기" : "정상",
-                        "pressureValue", pressureValue,
-                        "personDetected", personDetected,
-                        "objectDetected", objectDetected,
-                        "cameraConfidence", cameraConfidence,
-                        "gateway", gateway
-                ));
-            }
-        }
-    }
-
-    private void seedAlertHistory() {
-        alertHistory.add(mapOf("id", "AL-1008", "seatId", "3A-07", "studentIdMasked", "2023****", "messageType", "경고 전송", "channel", "앱 푸시", "createdAt", "2026.03.27 17:18", "status", "전송 완료", "message", "장시간 자리 비움으로 경고 메시지를 전송했습니다."));
-        alertHistory.add(mapOf("id", "AL-1007", "seatId", "3C-02", "studentIdMasked", "2024****", "messageType", "경고 전송", "channel", "앱 푸시", "createdAt", "2026.03.27 17:10", "status", "전송 완료", "message", "물품 방치 의심 좌석에 대한 경고를 보냈습니다."));
-        alertHistory.add(mapOf("id", "AL-1006", "seatId", "3B-05", "studentIdMasked", "2022****", "messageType", "센서 점검 안내", "channel", "관리자 처리", "createdAt", "2026.03.27 16:53", "status", "전송 완료", "message", "센서 지연 이슈로 점검 안내를 등록했습니다."));
-        alertHistory.add(mapOf("id", "AL-1005", "seatId", "3D-04", "studentIdMasked", "2021****", "messageType", "경고 전송", "channel", "앱 푸시", "createdAt", "2026.03.27 16:35", "status", "전송 완료", "message", "장시간 비움 좌석으로 분류되어 알림을 보냈습니다."));
-        alertHistory.add(mapOf("id", "AL-1004", "seatId", "3D-07", "studentIdMasked", "2023****", "messageType", "처리 완료", "channel", "관리자 처리", "createdAt", "2026.03.27 15:51", "status", "전송 완료", "message", "현장 확인 후 처리 완료로 변경했습니다."));
-    }
-
-    private void seedAlertRules() {
-        alertRules.add(mapOf("ruleId", "RULE-01", "name", "물품 장기 방치 알림", "condition", "압력 미감지 + 물체 감지", "thresholdMinutes", 10, "channel", "앱 푸시", "enabled", true, "targetType", "물품 방치"));
-        alertRules.add(mapOf("ruleId", "RULE-02", "name", "장시간 비움 알림", "condition", "압력 0 + 사람 미감지 지속", "thresholdMinutes", 15, "channel", "앱 푸시", "enabled", true, "targetType", "장시간 비움"));
-        alertRules.add(mapOf("ruleId", "RULE-03", "name", "센서 지연 점검", "condition", "게이트웨이 지연 1000ms 초과", "thresholdMinutes", 5, "channel", "관리자 처리", "enabled", true, "targetType", "센서 지연"));
-        alertRules.add(mapOf("ruleId", "RULE-04", "name", "심야 자동 알림", "condition", "폐관 전 미반납 좌석", "thresholdMinutes", 5, "channel", "앱 푸시", "enabled", false, "targetType", "폐관 관리"));
-        alertRules.add(mapOf("ruleId", "RULE-05", "name", "수동 검토 큐", "condition", "재인식 실패 2회 이상", "thresholdMinutes", 3, "channel", "관리자 처리", "enabled", true, "targetType", "재인식 실패"));
-    }
-
-    private void seedLostItems() {
-        lostItems.add(mapOf("itemId", "LOST-101", "category", "전자기기", "foundAt", "2026.03.27 16:20", "zone", "3구역", "seatId", "3A-07", "description", "검정색 무선 이어폰 케이스", "status", "보관 중", "custodian", "관리자 김도윤"));
-        lostItems.add(mapOf("itemId", "LOST-102", "category", "문구", "foundAt", "2026.03.27 15:40", "zone", "3구역", "seatId", "3C-02", "description", "은색 샤프펜슬", "status", "보관 중", "custodian", "관리자 김도윤"));
-        lostItems.add(mapOf("itemId", "LOST-103", "category", "생활용품", "foundAt", "2026.03.27 14:30", "zone", "1구역", "seatId", "1B-12", "description", "파란색 텀블러", "status", "인계 완료", "custodian", "관리자 이나연"));
-        lostItems.add(mapOf("itemId", "LOST-104", "category", "전자기기", "foundAt", "2026.03.26 20:10", "zone", "2구역", "seatId", "2D-05", "description", "충전 케이블", "status", "보관 중", "custodian", "관리자 이나연"));
-    }
-
-    private void seedDevices() {
-        devices.add(mapOf("deviceId", "edge-rpi-01", "type", "Gateway", "zone", "1구역", "status", "정상", "lastSeen", "17:22", "latencyMs", 38, "notes", "좌석 센서 1~12"));
-        devices.add(mapOf("deviceId", "edge-rpi-02", "type", "Gateway", "zone", "2구역", "status", "정상", "lastSeen", "17:22", "latencyMs", 42, "notes", "좌석 센서 13~24"));
-        devices.add(mapOf("deviceId", "edge-rpi-03", "type", "Gateway", "zone", "3구역", "status", "정상", "lastSeen", "17:22", "latencyMs", 55, "notes", "좌석 센서 25~40"));
-        devices.add(mapOf("deviceId", "cam-01", "type", "Camera", "zone", "1구역", "status", "정상", "lastSeen", "17:22", "latencyMs", 64, "notes", "천장형 카메라"));
-        devices.add(mapOf("deviceId", "cam-02", "type", "Camera", "zone", "2구역", "status", "정상", "lastSeen", "17:22", "latencyMs", 70, "notes", "천장형 카메라"));
-        devices.add(mapOf("deviceId", "cam-03", "type", "Camera", "zone", "3구역", "status", "지연", "lastSeen", "17:20", "latencyMs", 1420, "notes", "프레임 재전송 발생"));
-    }
-
-    private void seedSensorLogs() {
-        sensorLogs.add(mapOf("id", "LOG-101", "timestamp", "2026.03.27 17:21", "deviceId", "edge-rpi-03", "seatId", "3A-07", "eventType", "VACANT_LONG", "value", "0.00", "message", "장시간 비움 상태 지속", "status", "지연"));
-        sensorLogs.add(mapOf("id", "LOG-102", "timestamp", "2026.03.27 17:19", "deviceId", "edge-rpi-03", "seatId", "3C-02", "eventType", "OBJECT_ONLY", "value", "0.04", "message", "물품 방치 의심 상태 재감지", "status", "정상"));
-        sensorLogs.add(mapOf("id", "LOG-103", "timestamp", "2026.03.27 17:17", "deviceId", "cam-03", "seatId", "3B-05", "eventType", "FRAME_DELAY", "value", "1450ms", "message", "카메라 프레임 수신 지연", "status", "지연"));
-        sensorLogs.add(mapOf("id", "LOG-104", "timestamp", "2026.03.27 17:15", "deviceId", "edge-rpi-02", "seatId", "2C-11", "eventType", "OCCUPIED", "value", "0.82", "message", "정상 착석 감지", "status", "정상"));
-        sensorLogs.add(mapOf("id", "LOG-105", "timestamp", "2026.03.27 17:12", "deviceId", "edge-rpi-01", "seatId", "1A-04", "eventType", "AVAILABLE", "value", "0.01", "message", "좌석 반납 완료", "status", "정상"));
-    }
-
-    private void seedSettings() {
-        settings.put("pushAlertsEnabled", true);
-        settings.put("smsAlertsEnabled", false);
-        settings.put("quietHoursStart", "22:00");
-        settings.put("quietHoursEnd", "07:00");
-        settings.put("autoReleaseEnabled", true);
-        settings.put("lostItemAutoRegisterEnabled", true);
-        settings.put("vacantSeatThresholdMinutes", 15);
-        settings.put("objectDetectionThresholdMinutes", 10);
-        settings.put("dashboardRefreshSeconds", 8);
-        settings.put("sensorDelayThresholdSeconds", 5);
-        settings.put("libraryMode", "NORMAL");
     }
 
     private Map<String, Object> mapOf(Object... pairs) {

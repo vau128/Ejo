@@ -9,6 +9,14 @@ class AppSettings {
   final bool seatAlertEnabled;
   final bool warningAlertEnabled;
 
+  factory AppSettings.fromJson(Map<String, dynamic> json) {
+    return AppSettings(
+      pushEnabled: json['pushEnabled'] as bool? ?? false,
+      seatAlertEnabled: json['seatAlertEnabled'] as bool? ?? false,
+      warningAlertEnabled: json['warningAlertEnabled'] as bool? ?? false,
+    );
+  }
+
   AppSettings copyWith({
     bool? pushEnabled,
     bool? seatAlertEnabled,

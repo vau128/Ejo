@@ -1,51 +1,68 @@
-import { getStatistics } from '../api/dashboardApi';
+import { getSeats } from '../api/dashboardApi';
 import MetricCard from '../components/MetricCard';
-import MiniLineChart from '../components/MiniLineChart';
 import PageHeader from '../components/PageHeader';
 import SectionCard from '../components/SectionCard';
 import { useApiData } from '../hooks/useApiData';
 
+const normalPostures = ['정상', '바른 자세 유지 중'];
+
 export default function StatisticsPage() {
-  const { data, loading, error } = useApiData(getStatistics, []);
+  const { data, loading, error } = useApiData(getSeats, [], { intervalMs: 10000 });
 
   if (loading && !data) return <div className="app-card p-10 text-center text-sm text-slate-500">통계 데이터를 불러오는 중입니다.</div>;
   if (error && !data) return <div className="app-card p-10 text-center text-sm text-rose-600">{error}</div>;
 
+  const seats = data ?? [];
+  const postureRows = seats.map((seat) => ({ label: seat.location, posture: seat.posture }));
+  const normalCount = seats.filter((seat) => normalPostures.includes(seat.posture)).length;
+  const abnormalCount = seats.length - normalCount;
+  const normalRatio = seats.length ? Math.round((normalCount / seats.length) * 100) : 0;
+
   return (
     <div>
-      <PageHeader title="통계" description="시간대별 이용률, 좌석 회전율, 비정상 발생 빈도를 확인합니다." />
+      <PageHeader title="통계" description="현재 자세 상태와 사석화 연관 지표를 확인합니다." />
 
       <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard label="최대 이용률" value={data.summary.peakUsageRate} helper="금일 최고치" accent="brand" />
-        <MetricCard label="좌석 회전율" value={data.summary.seatTurnover} helper="평균 사용 회차" accent="emerald" />
-        <MetricCard label="비정상 발생 빈도" value={data.summary.abnormalFrequency} helper="최근 7일 기준" accent="rose" />
+        <MetricCard label="정상 자세 비율" value={`${normalRatio}%`} helper="현재 좌석 기준" accent="emerald" />
+        <MetricCard label="비정상 자세 횟수" value={abnormalCount} helper="현재 감지 좌석 수" accent="rose" />
+        <MetricCard label="사석화 좌석" value={seats.filter((seat) => seat.status === 'SQUATTING' || seat.status === 'ABNORMAL').length} helper="관리자 확인 필요" accent="amber" />
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <SectionCard title="시간대별 이용률" subtitle="시간 흐름에 따른 점유율 변화입니다.">
-          <MiniLineChart labels={data.hourlyUsage.map((item) => item.time)} values={data.hourlyUsage.map((item) => item.value)} />
+        <SectionCard title="최근 감지 자세" subtitle="좌석별 최신 헬스케어 상태입니다.">
+          <div className="grid gap-3">
+            {postureRows.map((item) => (
+              <div key={item.label} className="rounded-2xl border border-slate-200 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <p className="font-medium text-slate-800">{item.label}</p>
+                  <span className="text-sm text-slate-500">{item.posture}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </SectionCard>
 
-        <SectionCard title="좌석 회전율" subtitle="시간대별 회전율 추이를 나타냅니다.">
-          <MiniLineChart labels={data.turnoverTrend.map((item) => item.time)} values={data.turnoverTrend.map((item) => item.value)} />
+        <SectionCard title="자세 분포" subtitle="정상과 비정상 상태를 단순 비율로 표시합니다.">
+          <div className="grid gap-4">
+            <BarRow label="정상 자세" value={normalCount} rate={normalRatio} tone="bg-emerald-500" />
+            <BarRow label="비정상 자세" value={abnormalCount} rate={100 - normalRatio} tone="bg-rose-500" />
+          </div>
         </SectionCard>
       </div>
+    </div>
+  );
+}
 
-      <SectionCard title="비정상 발생 분포" subtitle="유형별 발생 건수를 비교합니다." className="mt-6">
-        <div className="grid gap-4">
-          {data.abnormalBreakdown.map((item) => (
-            <div key={item.label}>
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="text-slate-600">{item.label}</span>
-                <span className="font-semibold text-slate-800">{item.value}건</span>
-              </div>
-              <div className="h-3 rounded-full bg-slate-100">
-                <div className="h-3 rounded-full bg-brand-500" style={{ width: `${item.rate}%` }} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </SectionCard>
+function BarRow({ label, value, rate, tone }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between text-sm">
+        <span className="text-slate-600">{label}</span>
+        <span className="font-semibold text-slate-800">{value}석</span>
+      </div>
+      <div className="h-3 rounded-full bg-slate-100">
+        <div className={`h-3 rounded-full ${tone}`} style={{ width: `${Math.max(rate, 4)}%` }} />
+      </div>
     </div>
   );
 }
