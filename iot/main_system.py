@@ -3,7 +3,7 @@ import boto3
 import os
 import requests # API 통신을 위한 라이브러리
 import json # JSON 데이터를 파싱하기 위한 라이브러리
-from datetime import datetime
+from datetime import datetime, timezone
 from ultralytics import YOLO
 import paho.mqtt.client as mqtt
 from threading import Timer
@@ -19,16 +19,17 @@ load_dotenv()
 AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY", "")
 AWS_SECRET_KEY = os.getenv("AWS_SECRET_KEY", "")
 AWS_REGION = "ap-northeast-2" # 예: 서울 리전
-BUCKET_NAME = "BUCKET_NAME"
+BUCKET_NAME = "new-ejo-bucket"
 
 # Tapo C200 IP 카메라 RTSP 주소
 CAM_URL = "rtsp://abcd1234:00001234@172.20.10.10:554/stream1"
 
-# 백엔드 API 주소들
-FASTAPI_SQUATTING_URL = "http://서버IP:8000/api/seat/squatting"  # 사석화 알림용
-FASTAPI_LOST_ITEM_URL = "http://서버IP:8000/api/seat/lost-item"  # 분실물 정보 전송용
-FASTAPI_POSTURE_URL = "http://서버IP:8000/api/seat/posture"      # 헬스케어 자세 데이터 전송용
-FASTAPI_CHECKIN_STATUS_URL = "http://서버IP:8000/api/seat/check-in-status" # 발권 상태 확인용
+# 백엔드 실제 API 주소 반영
+BASE_URL = "http://13.209.33.104:8080"
+FASTAPI_SQUATTING_URL = f"{BASE_URL}/api/seat/squatting"
+FASTAPI_LOST_ITEM_URL = f"{BASE_URL}/api/seat/lost-item"
+FASTAPI_POSTURE_URL = f"{BASE_URL}/api/seat/posture"
+FASTAPI_CHECKIN_STATUS_URL = f"{BASE_URL}/api/seat/check-in-status"
 
 # 라즈베리 파이 담당 좌석 번호 (CCTV 모드에서는 자동 계산하므로 주석 처리)
 # PI_SEAT_NUM = 2 
@@ -70,8 +71,8 @@ def check_lost_items():
     
     try:
         # 1. YOLO 모델 로드
-        print("[YOLO] Loading model 'best_v2.pt'...")
-        model = YOLO('best_v2.pt')
+        print("[YOLO] Loading model 'best_v4.pt'...")
+        model = YOLO('best_v4.pt')
         
         # 2. 웹캠 사진 촬영
         print(f"[CAMERA] Connecting to RTSP stream: {CAM_URL}...")
@@ -228,19 +229,30 @@ def on_message(client, userdata, msg):
                     squatting_timers[seat_num].cancel()
                     del squatting_timers[seat_num]
                 
+                # timestamp 생성 (UTC 기준 ISO 8601 포맷)
+                current_time_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
                 # 라즈베리 파이가 메인 서버(백엔드)로 헬스케어 데이터 전송
                 posture_payload = {
                     "seat_num": seat_num,
                     "posture": posture,
                     "left_pressure": data.get("left", 0),
                     "right_pressure": data.get("right", 0),
-                    "back_pressure": data.get("back", 0)
+                    "back_pressure": data.get("back", 0),
+                    "timestamp": current_time_iso 
                 }
                 try:
-                    requests.post(FASTAPI_POSTURE_URL, json=posture_payload)
-                    print(f"[API] Posture data sent to main server successfully!")
+                    # 응답 결과를 response 변수에 담기
+                    response = requests.post(FASTAPI_POSTURE_URL, json=posture_payload)
+                    
+                    # HTTP 상태 코드가 200번대(성공)일 때만 성공 로그 출력
+                    if response.status_code == 200 or response.status_code == 201:
+                        print(f"[SUCCESS] Posture data sent! (Seat {seat_num})")
+                    else:
+                        print(f"[ERROR] Posture API failed. HTTP Code: {response.status_code}, Response: {response.text}")
+                        
                 except Exception as e:
-                    print(f"[ERROR] Failed to send posture API: {e}")
+                    print(f"[ERROR] Failed to connect to server for posture API: {e}")
 
         except json.JSONDecodeError:
             # JSON 형식이 깨지거나 알 수 없는 데이터가 들어와도 서버가 꺼지지 않도록 방어
