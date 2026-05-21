@@ -27,5 +27,12 @@ app:
     enabled: false
   iot:
     enabled: false
+    mqtt:
+      enabled: false
+      broker-url: ${MQTT_BROKER_URL:tcp://localhost:1883}
+      client-id-prefix: ${MQTT_CLIENT_ID_PREFIX:library-admin-backend}
+      username: ${MQTT_USERNAME:}
+      password: ${MQTT_PASSWORD:}
+      qos: ${MQTT_QOS:1}
   aws:
     enabled: false

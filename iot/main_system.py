@@ -1,5 +1,6 @@
 import os
 import time
+import json
 
 import cv2
 import paho.mqtt.client as mqtt
@@ -9,14 +10,15 @@ from ultralytics import YOLO
 # [설정] AI 모델 및 서버 주소
 model = YOLO("yolov8n.pt")
 CAM_URL = os.getenv("CAM_URL", "")
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8080/api/iot/seat-status")
+BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://13.209.33.104/api").rstrip("/")
+MQTT_BROKER = os.getenv("MQTT_BROKER", "172.20.10.9")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+LOST_ITEM_SCAN_TOPIC = os.getenv("LOST_ITEM_SCAN_TOPIC", "admin/trigger_lost_item")
 SEAT_ID_MAP = {
     1: "seat-1",
     2: "seat-2",
     3: "seat-3",
     4: "seat-4",
-    5: "seat-5",
-    6: "seat-6",
 }
 
 # ---------------------------------------------------------
@@ -30,12 +32,10 @@ SEAT_ZONES = {
     2: [160, 10, 300, 150],
     3: [310, 10, 450, 150],
     4: [460, 10, 600, 150],
-    5: [10, 160, 150, 300],
-    6: [160, 160, 300, 300],
 }
 
 # ---------------------------------------------------------
-# [상태 관리] 6개 좌석의 독립적인 상태를 저장하기 위한 딕셔너리
+# [상태 관리] 4개 좌석의 독립적인 상태를 저장하기 위한 딕셔너리
 # ---------------------------------------------------------
 seat_data = {
     i: {
@@ -47,7 +47,7 @@ seat_data = {
         "last_ai_time": 0,
         "is_item_present": False,
     }
-    for i in range(1, 7)
+    for i in range(1, 5)
 }
 
 
@@ -101,22 +101,57 @@ def run_ai_analysis(seat_id, save_path=None):
         return False
 
 
+def post_json(path, payload):
+    """Spring Boot 서버 최종 API 호출"""
+    url = f"{BACKEND_BASE_URL}{path}"
+    response = requests.post(url, json=payload, timeout=5)
+    response.raise_for_status()
+    return response
+
+
 def send_to_server(seat_id, status, image_url=None):
-    """Spring Boot 서버로 최종 판정 결과를 전송"""
+    """현재 백엔드 API 규격에 맞춰 상태를 전송"""
     try:
-        data = {
-            "seat_id": SEAT_ID_MAP.get(seat_id, f"seat-{seat_id}"),
-            "status": status,
-            "image_url": image_url,
-            "update_time": time.strftime("%Y-%m-%d %H:%M:%S"),
-        }
-        response = requests.post(BACKEND_URL, json=data, timeout=5)
-        if response.status_code == 200:
-            print(f"서버 전송 성공 ({data['seat_id']}): {status}")
+        if "사석화" in status:
+            payload = {"seat_num": seat_id, "status": "squatting"}
+            response = post_json("/seat/squatting", payload)
+            print(f"사석화 전송 성공 ({seat_id}번): {response.text}")
+        elif status == "분실물 확정":
+            payload = {
+                "seat_num": seat_id,
+                "image_url": image_url or "https://example.com/lost_item.jpg",
+                "category": "unknown",
+            }
+            response = post_json("/seat/lost-item", payload)
+            print(f"분실물 전송 성공 ({seat_id}번): {response.text}")
         else:
-            print(f"서버 응답 에러: {response.status_code}")
+            print(f"전송 생략 ({seat_id}번): {status}")
     except Exception as e:
         print(f"서버 연결 실패: {e}")
+
+
+def trigger_manual_lost_item_scan():
+    """관리자 수동 스캔 명령을 처리하고 분실물을 바로 등록한다."""
+    print("관리자 수동 분실물 스캔 시작")
+    detected_count = 0
+
+    for seat_id in range(1, 5):
+        img_name = f"manual_lost_item_seat{seat_id}_{int(time.time())}.jpg"
+        has_item = run_ai_analysis(seat_id, save_path=img_name)
+        if not has_item:
+            continue
+
+        image_url = upload_to_s3(img_name, img_name) or "https://example.com/lost_item.jpg"
+        send_to_server(seat_id, "분실물 확정", image_url=image_url)
+        print(f"관리자 수동 분실물 등록 완료 ({seat_id}번)")
+        detected_count += 1
+
+    if detected_count == 0:
+        print("관리자 수동 스캔 결과: 감지된 분실물 없음")
+        return False
+
+    print(f"관리자 수동 스캔 결과: {detected_count}건 등록")
+    return True
 
 
 def on_message(client, userdata, msg):
@@ -125,6 +160,21 @@ def on_message(client, userdata, msg):
     try:
         topic = msg.topic
         payload = msg.payload.decode().strip()
+
+        if topic == LOST_ITEM_SCAN_TOPIC:
+            command = None
+            try:
+                decoded = json.loads(payload) if payload else {}
+                command = decoded.get("command")
+            except json.JSONDecodeError:
+                print(f"수동 스캔 명령 파싱 실패: {payload}")
+                return
+
+            if command == "detect":
+                trigger_manual_lost_item_scan()
+            else:
+                print(f"지원하지 않는 수동 스캔 명령: {command}")
+            return
 
         topic_parts = topic.split("/")
         if len(topic_parts) < 3:
@@ -216,9 +266,11 @@ client.on_message = on_message
 client.on_disconnect = on_disconnect
 
 try:
-    client.connect("localhost", 1883, 60)
-    client.subscribe([("seat/status/#", 0), ("seat/checkout/#", 0)])
-    print("시스템 가동 중... (6개 좌석 통합 관리 모드)")
+    print(f"MQTT broker: {MQTT_BROKER}:{MQTT_PORT}")
+    print(f"Backend API: {BACKEND_BASE_URL}")
+    client.connect(MQTT_BROKER, MQTT_PORT, 60)
+    client.subscribe([("seat/status/#", 0), ("seat/checkout/#", 0), (LOST_ITEM_SCAN_TOPIC, 0)])
+    print("시스템 가동 중... (4개 좌석 통합 관리 모드)")
     client.loop_forever()
 except Exception as e:
     print(f"가동 실패: {e}")

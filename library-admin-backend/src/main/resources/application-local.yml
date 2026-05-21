@@ -32,6 +32,13 @@ app:
     api-key: local-iot-key
     request-timeout-ms: 3000
     heartbeat-threshold-seconds: 30
+    mqtt:
+      enabled: false
+      broker-url: ${MQTT_BROKER_URL:tcp://localhost:1883}
+      client-id-prefix: ${MQTT_CLIENT_ID_PREFIX:library-admin-backend-local}
+      username: ${MQTT_USERNAME:}
+      password: ${MQTT_PASSWORD:}
+      qos: ${MQTT_QOS:1}
   aws:
     enabled: false
     region: ap-northeast-2

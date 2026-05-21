@@ -30,6 +30,13 @@ app:
     api-key: ${IOT_API_KEY}
     request-timeout-ms: ${IOT_TIMEOUT_MS:3000}
     heartbeat-threshold-seconds: ${IOT_HEARTBEAT_THRESHOLD_SECONDS:30}
+    mqtt:
+      enabled: ${MQTT_ENABLED:true}
+      broker-url: ${MQTT_BROKER_URL:tcp://${MQTT_BROKER:localhost}:${MQTT_PORT:1883}}
+      client-id-prefix: ${MQTT_CLIENT_ID_PREFIX:library-admin-backend-dev}
+      username: ${MQTT_USERNAME:}
+      password: ${MQTT_PASSWORD:}
+      qos: ${MQTT_QOS:1}
   aws:
     enabled: true
     region: ${AWS_REGION}
