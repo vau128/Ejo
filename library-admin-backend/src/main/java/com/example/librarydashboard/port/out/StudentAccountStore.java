@@ -14,4 +14,6 @@ public interface StudentAccountStore {
     Optional<Map<String, Object>> findByToken(String token);
 
     void saveSessionToken(String token, String userId);
+
+    void resetForTesting();
 }

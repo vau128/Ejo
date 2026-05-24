@@ -20,7 +20,7 @@ public class InMemoryStudentAccountStore implements StudentAccountStore {
         student.put("studentId", "20240001");
         student.put("email", "student@library.com");
         student.put("password", "password123");
-        student.put("warningCount", 2);
+        student.put("warningCount", 0);
         student.put("agreedToPrivacy", true);
         student.put("selectedSeatId", null);
         studentsByEmail.put("student@library.com", student);
@@ -58,5 +58,14 @@ public class InMemoryStudentAccountStore implements StudentAccountStore {
     @Override
     public void saveSessionToken(String token, String userId) {
         userIdByToken.put(token, userId);
+    }
+
+    @Override
+    public void resetForTesting() {
+        userIdByToken.clear();
+        for (Map<String, Object> student : studentsByEmail.values()) {
+            student.put("warningCount", 0);
+            student.put("selectedSeatId", null);
+        }
     }
 }

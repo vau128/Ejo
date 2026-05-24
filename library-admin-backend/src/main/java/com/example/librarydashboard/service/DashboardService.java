@@ -2,14 +2,17 @@ package com.example.librarydashboard.service;
 
 import com.example.librarydashboard.dto.IotSeatStatusRequest;
 import com.example.librarydashboard.dto.SettingsUpdateRequest;
+import com.example.librarydashboard.entity.Seat;
 import com.example.librarydashboard.port.out.DashboardOperationsStore;
 import com.example.librarydashboard.port.out.DeviceEventGateway;
 import com.example.librarydashboard.port.out.NotificationGateway;
+import com.example.librarydashboard.repository.SeatRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -27,19 +30,22 @@ public class DashboardService {
     private final DashboardOperationsStore dashboardOperationsStore;
     private final DeviceEventGateway deviceEventGateway;
     private final NotificationGateway notificationGateway;
+    private final SeatRepository seatRepository;
 
     public DashboardService(
             DashboardOperationsStore dashboardOperationsStore,
             DeviceEventGateway deviceEventGateway,
-            NotificationGateway notificationGateway
+            NotificationGateway notificationGateway,
+            SeatRepository seatRepository
     ) {
         this.dashboardOperationsStore = dashboardOperationsStore;
         this.deviceEventGateway = deviceEventGateway;
         this.notificationGateway = notificationGateway;
+        this.seatRepository = seatRepository;
     }
 
     public Map<String, Object> getOverview() {
-        List<Map<String, Object>> seats = dashboardOperationsStore.findAllSeats();
+        List<Map<String, Object>> seats = loadDashboardSeats();
         List<Map<String, Object>> alertHistory = dashboardOperationsStore.findAlertHistory();
         List<Map<String, Object>> lostItems = dashboardOperationsStore.findLostItems();
         List<Map<String, Object>> devices = dashboardOperationsStore.findDevices();
@@ -51,6 +57,7 @@ public class DashboardService {
 
         Map<String, Object> zonePreview = new LinkedHashMap<>();
         zonePreview.put("totalSeats", seats.size());
+        zonePreview.put("reservedSeats", countByStatus(seats, "RESERVED"));
         zonePreview.put("occupiedSeats", countByStatus(seats, "OCCUPIED"));
         zonePreview.put("abnormalSeats", countAbnormalSeats(seats));
         zonePreview.put("seats", seats.stream().limit(16).toList());
@@ -69,7 +76,7 @@ public class DashboardService {
     }
 
     public Map<String, Object> getActions() {
-        List<Map<String, Object>> seats = dashboardOperationsStore.findAllSeats();
+        List<Map<String, Object>> seats = loadDashboardSeats();
         List<Map<String, Object>> actionQueue = buildActionQueue(seats);
 
         Map<String, Object> summary = new LinkedHashMap<>();
@@ -84,10 +91,7 @@ public class DashboardService {
     }
 
     public Map<String, Object> sendWarning(String seatId) {
-        Map<String, Object> seat = findSeat(seatId);
-        seat.put("actionStatus", "경고 전송");
-        seat.put("notes", "관리자 경고 발송 완료");
-        dashboardOperationsStore.saveSeat(seat);
+        Map<String, Object> seat = findSeatView(seatId);
         addHistory(seatId, "경고 전송", "앱 푸시", "전송 완료", "좌석 상태 이상으로 경고 메시지를 발송했습니다.");
         addSensorLog("ALERT_PUSH", seatId, "edge-rpi-03", "warn", "관리자 경고 메시지 전송", "정상");
         notificationGateway.sendStudentNotification("masked-student", "좌석 경고", "좌석 상태 이상으로 경고가 발송되었습니다.", mapOf("seatId", seatId));
@@ -95,35 +99,29 @@ public class DashboardService {
     }
 
     public Map<String, Object> releaseSeat(String seatId) {
-        Map<String, Object> seat = findSeat(seatId);
-        seat.put("status", "AVAILABLE");
-        seat.put("statusLabel", statusLabel("AVAILABLE"));
-        seat.put("abnormal", false);
-        seat.put("durationMinutes", 0);
-        seat.put("actionStatus", "상태 해제");
-        seat.put("issueType", "정상 상태 복구");
-        seat.put("notes", "관리자 확인 후 사용 가능 처리");
-        seat.put("lastUpdated", HISTORY_FORMATTER.format(LocalDateTime.now()));
-        dashboardOperationsStore.saveSeat(seat);
+        Seat seat = findSeatEntity(seatId);
+        seat.setCheckedIn(false);
+        seat.setOccupied(false);
+        seat.setStatus("AVAILABLE");
+        seat.setVacantSince(null);
+        seat.setUpdatedAt(LocalDateTime.now());
+        seatRepository.save(seat);
         addHistory(seatId, "상태 해제", "관리자 처리", "전송 완료", "관리자가 좌석 상태를 사용 가능으로 복구했습니다.");
         addSensorLog("SEAT_RELEASE", seatId, "edge-rpi-02", "release", "관리자 상태 해제 처리", "정상");
-        deviceEventGateway.publishSeatStatusChanged(seatId, "AVAILABLE", seat);
+        deviceEventGateway.publishSeatStatusChanged(seatId, "AVAILABLE", mapSeatForDashboard(seat));
         return message("좌석 상태를 해제했습니다.");
     }
 
     public Map<String, Object> resolveIssue(String seatId) {
-        Map<String, Object> seat = findSeat(seatId);
-        seat.put("abnormal", false);
-        seat.put("actionStatus", "처리 완료");
-        seat.put("notes", "현장 확인 완료");
-        if (!Objects.equals(seat.get("status"), "AVAILABLE")) {
-            seat.put("status", "OCCUPIED");
-            seat.put("statusLabel", statusLabel("OCCUPIED"));
+        Seat seat = findSeatEntity(seatId);
+        if ("VACANT_LONG".equals(normalizeSeatStatus(seat.getStatus()))) {
+            seat.setStatus(seat.isOccupied() ? "OCCUPIED" : seat.isCheckedIn() ? "RESERVED" : "AVAILABLE");
         }
-        dashboardOperationsStore.saveSeat(seat);
+        seat.setUpdatedAt(LocalDateTime.now());
+        seatRepository.save(seat);
         addHistory(seatId, "처리 완료", "관리자 처리", "전송 완료", "비정상 상태 확인 후 처리 완료로 변경했습니다.");
         addSensorLog("ISSUE_RESOLVED", seatId, "edge-rpi-01", "resolved", "현장 점검 후 처리 완료", "정상");
-        deviceEventGateway.publishSeatStatusChanged(seatId, String.valueOf(seat.get("status")), seat);
+        deviceEventGateway.publishSeatStatusChanged(seatId, seat.getStatus(), mapSeatForDashboard(seat));
         return message("처리 완료로 변경했습니다.");
     }
 
@@ -254,7 +252,7 @@ public class DashboardService {
     }
 
     public Map<String, Object> getZoneSeats(String status, String search) {
-        List<Map<String, Object>> seats = dashboardOperationsStore.findAllSeats();
+        List<Map<String, Object>> seats = loadDashboardSeats();
         List<Map<String, Object>> filtered = seats.stream()
                 .filter(seat -> status == null || status.isBlank() || Objects.equals(seat.get("status"), status))
                 .filter(seat -> search == null || search.isBlank() || String.valueOf(seat.get("seatId")).toLowerCase().contains(search.toLowerCase()))
@@ -263,6 +261,7 @@ public class DashboardService {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("zoneName", "좌석 현황");
         summary.put("totalSeats", seats.size());
+        summary.put("reservedSeats", countByStatus(seats, "RESERVED"));
         summary.put("occupiedSeats", countByStatus(seats, "OCCUPIED"));
         summary.put("availableSeats", countByStatus(seats, "AVAILABLE"));
         summary.put("abnormalSeats", countAbnormalSeats(seats));
@@ -274,7 +273,7 @@ public class DashboardService {
     }
 
     public Map<String, Object> getSeatDetail(String seatId) {
-        Map<String, Object> seat = findSeat(seatId);
+        Map<String, Object> seat = findSeatView(seatId);
         Map<String, Object> sensor = new LinkedHashMap<>();
         sensor.put("pressureValue", seat.get("pressureValue"));
         sensor.put("personDetected", seat.get("personDetected"));
@@ -293,7 +292,7 @@ public class DashboardService {
     }
 
     public Map<String, Object> getAbnormalSeats() {
-        List<Map<String, Object>> seats = dashboardOperationsStore.findAllSeats();
+        List<Map<String, Object>> seats = loadDashboardSeats();
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("abnormalCount", countAbnormalSeats(seats));
         summary.put("objectOnly", countByStatus(seats, "OBJECT_ONLY"));
@@ -362,6 +361,7 @@ public class DashboardService {
     private Map<String, Object> buildSeatSummary(List<Map<String, Object>> seats) {
         return mapOf(
                 "totalSeats", seats.size(),
+                "reservedSeats", countByStatus(seats, "RESERVED"),
                 "occupiedSeats", countByStatus(seats, "OCCUPIED"),
                 "availableSeats", countByStatus(seats, "AVAILABLE"),
                 "abnormalSeats", countAbnormalSeats(seats),
@@ -425,8 +425,9 @@ public class DashboardService {
     private String severityForStatus(String status) {
         return switch (status) {
             case "OBJECT_ONLY", "ITEM" -> "주의";
-            case "VACANT_LONG", "RESERVED" -> "긴급";
+            case "VACANT_LONG" -> "긴급";
             case "SENSOR_DELAY" -> "지연";
+            case "RESERVED" -> "안내";
             default -> "확인";
         };
     }
@@ -465,7 +466,7 @@ public class DashboardService {
 
     private boolean isAbnormalStatus(String status) {
         return switch (status) {
-            case "OBJECT_ONLY", "VACANT_LONG", "SENSOR_DELAY", "RESERVED" -> true;
+            case "OBJECT_ONLY", "VACANT_LONG", "SENSOR_DELAY" -> true;
             default -> false;
         };
     }
@@ -481,9 +482,14 @@ public class DashboardService {
         };
     }
 
-    private Map<String, Object> findSeat(String seatId) {
-        return dashboardOperationsStore.findSeatById(seatId)
+    private Seat findSeatEntity(String seatId) {
+        int seatNum = parseSeatNum(seatId);
+        return seatRepository.findBySeatNum(seatNum)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "좌석을 찾을 수 없습니다."));
+    }
+
+    private Map<String, Object> findSeatView(String seatId) {
+        return mapSeatForDashboard(findSeatEntity(seatId));
     }
 
     private void addHistory(String seatId, String messageType, String channel, String status, String message) {
@@ -521,11 +527,120 @@ public class DashboardService {
         return switch (status) {
             case "OCCUPIED" -> "사용 중";
             case "AVAILABLE" -> "비어있음";
+            case "RESERVED" -> "발권됨";
             case "OBJECT_ONLY", "ITEM" -> "물품 감지";
-            case "VACANT_LONG", "RESERVED" -> "사유석 의심";
+            case "VACANT_LONG" -> "장시간 비움";
             case "SENSOR_DELAY" -> "센서 지연";
             default -> status;
         };
+    }
+
+    private List<Map<String, Object>> loadDashboardSeats() {
+        return seatRepository.findAll().stream()
+                .filter(seat -> seat.getSeatNum() != null && seat.getSeatNum() >= 1 && seat.getSeatNum() <= 4)
+                .sorted(Comparator.comparing(Seat::getSeatNum))
+                .map(this::mapSeatForDashboard)
+                .toList();
+    }
+
+    private Map<String, Object> mapSeatForDashboard(Seat seat) {
+        String normalizedStatus = normalizeSeatStatus(seat.getStatus());
+        boolean abnormal = isAbnormalStatus(normalizedStatus);
+        return mapOf(
+                "seatId", seatCode(seat),
+                "seatNumber", seat.getSeatNum(),
+                "status", normalizedStatus,
+                "statusLabel", statusLabel(normalizedStatus),
+                "lastUpdated", HISTORY_FORMATTER.format(defaultTime(seat.getUpdatedAt())),
+                "notes", notesForStatus(normalizedStatus),
+                "abnormal", abnormal,
+                "issueType", issueTypeForStatus(normalizedStatus),
+                "detectedAt", HISTORY_FORMATTER.format(defaultTime(seat.getUpdatedAt())),
+                "durationMinutes", calculateVacantMinutes(seat),
+                "sensorHint", sensorHint(seat),
+                "actionStatus", abnormal ? "대기" : "정상",
+                "pressureValue", seat.getPressure() == null ? 0.0d : seat.getPressure().doubleValue(),
+                "personDetected", seat.isOccupied(),
+                "objectDetected", "OBJECT_ONLY".equals(normalizedStatus),
+                "cameraConfidence", seat.isOccupied() ? 0.95d : 0.82d,
+                "gateway", gatewayForSeat(seat),
+                "checkedIn", seat.isCheckedIn(),
+                "posture", defaultPosture(seat.getPosture()),
+                "leftPressure", valueOrZero(seat.getLeftPressure()),
+                "rightPressure", valueOrZero(seat.getRightPressure()),
+                "backPressure", valueOrZero(seat.getBackPressure())
+        );
+    }
+
+    private String normalizeSeatStatus(String status) {
+        return switch (status) {
+            case "SQUATTING", "ABNORMAL" -> "VACANT_LONG";
+            default -> status == null || status.isBlank() ? "AVAILABLE" : status;
+        };
+    }
+
+    private String seatCode(Seat seat) {
+        if (seat.getSeatCode() != null && !seat.getSeatCode().isBlank()) {
+            return seat.getSeatCode();
+        }
+        return "seat-" + seat.getSeatNum();
+    }
+
+    private String gatewayForSeat(Seat seat) {
+        return seat.getSeatNum() != null && seat.getSeatNum() <= 2 ? "edge-rpi-01" : "edge-rpi-02";
+    }
+
+    private String sensorHint(Seat seat) {
+        return "left " + valueOrZero(seat.getLeftPressure())
+                + " / right " + valueOrZero(seat.getRightPressure())
+                + " / back " + valueOrZero(seat.getBackPressure());
+    }
+
+    private int valueOrZero(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private String defaultPosture(String posture) {
+        return posture == null || posture.isBlank() ? "정상" : posture;
+    }
+
+    private LocalDateTime defaultTime(LocalDateTime time) {
+        return time == null ? LocalDateTime.now() : time;
+    }
+
+    private int calculateVacantMinutes(Seat seat) {
+        if (!seat.isCheckedIn() || seat.isOccupied() || seat.getVacantSince() == null) {
+            return 0;
+        }
+        return (int) Math.max(0, ChronoUnit.MINUTES.between(seat.getVacantSince(), defaultTime(seat.getUpdatedAt())));
+    }
+
+    private String issueTypeForStatus(String status) {
+        return switch (status) {
+            case "RESERVED" -> "발권 후 미착석";
+            case "VACANT_LONG" -> "장시간 자리 비움";
+            case "OBJECT_ONLY" -> "물품만 감지됨";
+            case "SENSOR_DELAY" -> "센서 수집 지연";
+            default -> "정상 이용";
+        };
+    }
+
+    private String notesForStatus(String status) {
+        return switch (status) {
+            case "RESERVED" -> "학생이 좌석을 선택했지만 아직 착석이 감지되지 않았습니다.";
+            case "VACANT_LONG" -> "발권 또는 착석 이력 이후 압력 미감지 시간이 기준을 초과했습니다.";
+            case "OBJECT_ONLY" -> "사람 없이 물품만 감지된 좌석입니다.";
+            case "SENSOR_DELAY" -> "센서 데이터 수집이 지연되고 있습니다.";
+            default -> "정상 이용 중";
+        };
+    }
+
+    private int parseSeatNum(String seatId) {
+        String digits = seatId == null ? "" : seatId.replaceAll("[^0-9]", "");
+        if (digits.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "좌석 번호 형식이 올바르지 않습니다.");
+        }
+        return Integer.parseInt(digits);
     }
 
     private Map<String, Object> mapOf(Object... pairs) {

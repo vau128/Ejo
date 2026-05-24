@@ -20,6 +20,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.time.LocalDateTime;
 
 @Service
 public class AppService {
@@ -86,7 +87,7 @@ public class AppService {
         user.put("studentId", request.studentId().trim());
         user.put("email", normalizedEmail);
         user.put("password", request.password());
-        user.put("warningCount", 1);
+        user.put("warningCount", 0);
         user.put("agreedToPrivacy", true);
         user.put("selectedSeatId", null);
 
@@ -112,13 +113,19 @@ public class AppService {
                 .toList();
 
         long availableCount = seats.stream().filter(seat -> Objects.equals(seat.getStatus(), "AVAILABLE")).count();
+        long reservedCount = seats.stream().filter(seat -> Objects.equals(seat.getStatus(), "RESERVED")).count();
         long occupiedCount = seats.stream().filter(seat -> Objects.equals(seat.getStatus(), "OCCUPIED")).count();
-        long squattingCount = seats.stream().filter(seat -> Objects.equals(seat.getStatus(), "SQUATTING") || Objects.equals(seat.getStatus(), "ABNORMAL")).count();
+        long squattingCount = seats.stream().filter(seat ->
+                Objects.equals(seat.getStatus(), "VACANT_LONG")
+                        || Objects.equals(seat.getStatus(), "OBJECT_ONLY")
+                        || Objects.equals(seat.getStatus(), "SENSOR_DELAY")
+        ).count();
 
         return mapOf(
                 "summary", mapOf(
                         "totalSeats", seats.size(),
                         "availableSeats", availableCount,
+                        "reservedSeats", reservedCount,
                         "occupiedSeats", occupiedCount,
                         "squattingSeats", squattingCount
                 ),
@@ -128,22 +135,35 @@ public class AppService {
 
     public Map<String, Object> toggleSeatSelection(String token, String seatId) {
         Map<String, Object> user = requireUser(token);
-        Seat seat = seatRepository.findBySeatNum(parseSeatNumber(seatId))
+        int seatNumber = parseSeatNumber(seatId);
+        Seat seat = seatRepository.findBySeatNum(seatNumber)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "좌석을 찾을 수 없습니다."));
+        String normalizedSeatId = "seat-" + seatNumber;
 
         String selectedSeatId = stringValue(user.get("selectedSeatId"));
-        if (Objects.equals(selectedSeatId, seatId)) {
+        if (Objects.equals(selectedSeatId, normalizedSeatId)) {
             user.put("selectedSeatId", null);
             studentAccountStore.save(user);
+            seatStore.releaseSeatFromUser(String.valueOf(user.get("id")));
             seat.setCheckedIn(false);
+            seat.setVacantSince(null);
+            seat.setUpdatedAt(LocalDateTime.now());
             if (!seat.isOccupied()) {
                 seat.setStatus("AVAILABLE");
             }
             seatRepository.save(seat);
-            deviceEventGateway.publishSeatStatusChanged(seatId, "RELEASED", mapOf("userId", user.get("id")));
+            seatApiService.syncSeatToDashboardState(seat);
+            deviceEventGateway.publishSeatStatusChanged(normalizedSeatId, "RELEASED", mapOf("userId", user.get("id")));
             return mapOf(
                     "message", "좌석 선택이 취소되었습니다.",
                     "selectedSeat", null
+            );
+        }
+
+        if (selectedSeatId != null) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "이미 " + parseSeatNumber(selectedSeatId) + "번 좌석을 선택했습니다. 먼저 기존 좌석 선택을 취소해주세요."
             );
         }
 
@@ -154,15 +174,19 @@ public class AppService {
             );
         }
 
-        user.put("selectedSeatId", seatId);
+        user.put("selectedSeatId", normalizedSeatId);
         studentAccountStore.save(user);
         seat.setCheckedIn(true);
+        seat.setStatus("RESERVED");
+        seat.setVacantSince(seat.isOccupied() ? null : LocalDateTime.now());
+        seat.setUpdatedAt(LocalDateTime.now());
         seatRepository.save(seat);
-        seatStore.assignSeatToUser(seatId, String.valueOf(user.get("id")));
-        deviceEventGateway.publishSeatStatusChanged(seatId, "SELECTED", mapOf("userId", user.get("id")));
+        seatApiService.syncSeatToDashboardState(seat);
+        seatStore.assignSeatToUser(normalizedSeatId, String.valueOf(user.get("id")));
+        deviceEventGateway.publishSeatStatusChanged(normalizedSeatId, "SELECTED", mapOf("userId", user.get("id")));
         return mapOf(
                 "message", seat.getSeatNum() + "번 좌석이 선택되었습니다.",
-                "selectedSeat", seatResponse(seat, seatId)
+                "selectedSeat", seatResponse(seat, normalizedSeatId)
         );
     }
 
@@ -252,8 +276,11 @@ public class AppService {
     private String seatStatusLabel(String status) {
         return switch (status) {
             case "AVAILABLE" -> "빈 좌석";
+            case "RESERVED" -> "발권됨";
             case "OCCUPIED" -> "사용 중";
-            case "SQUATTING", "ABNORMAL" -> "사석화";
+            case "VACANT_LONG" -> "장시간 비움";
+            case "OBJECT_ONLY" -> "물품 감지";
+            case "SENSOR_DELAY" -> "센서 지연";
             default -> "알 수 없음";
         };
     }

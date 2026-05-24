@@ -16,6 +16,8 @@ public interface DashboardOperationsStore {
 
     void prependAlertHistory(Map<String, Object> history);
 
+    void clearAlertHistory();
+
     List<Map<String, Object>> findAlertRules();
 
     Optional<Map<String, Object>> findAlertRuleById(String ruleId);
@@ -28,11 +30,15 @@ public interface DashboardOperationsStore {
 
     Map<String, Object> saveLostItem(Map<String, Object> item);
 
+    void clearLostItems();
+
     List<Map<String, Object>> findDevices();
 
     List<Map<String, Object>> findSensorLogs();
 
     void prependSensorLog(Map<String, Object> log);
+
+    void clearSensorLogs();
 
     Map<String, Object> getSettings();
 

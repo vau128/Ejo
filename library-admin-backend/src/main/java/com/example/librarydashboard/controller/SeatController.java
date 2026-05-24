@@ -96,6 +96,11 @@ public class SeatController {
         return seatApiService.updateSquattingThreshold(request);
     }
 
+    @PostMapping("/testing/reset-demo-state")
+    public MessageResponse resetDemoState() {
+        return seatApiService.resetDemoState();
+    }
+
     @GetMapping("/db-test")
     public Map<String, Object> dbTest() {
         return seatApiService.getDatabaseTest();
