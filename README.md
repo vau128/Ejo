@@ -96,6 +96,15 @@ make app-get
 make app-run
 ```
 
+로컬 프론트/앱 개발만 빠르게 확인할 때는 AWS MySQL 대신 H2 메모리 DB 프로필을 사용할 수 있습니다.
+
+```bash
+cd /Users/jiyun/development/Ejo
+SPRING_PROFILES_ACTIVE=h2 mvn -f library-admin-backend/pom.xml spring-boot:run
+```
+
+이 경우 학생앱/웹은 로컬 백엔드(`localhost:8080`)를 바라보게 맞춰서 테스트합니다.
+
 ## 빌드
 
 ```bash

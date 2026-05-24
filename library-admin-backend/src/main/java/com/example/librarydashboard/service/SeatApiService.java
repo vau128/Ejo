@@ -20,6 +20,8 @@ import com.example.librarydashboard.entity.SystemSetting;
 import com.example.librarydashboard.entity.Warning;
 import com.example.librarydashboard.port.out.DashboardOperationsStore;
 import com.example.librarydashboard.port.out.DeviceEventGateway;
+import com.example.librarydashboard.port.out.ObjectStorageUrlResolver;
+import com.example.librarydashboard.port.out.StudentAccountStore;
 import com.example.librarydashboard.repository.LostItemRepository;
 import com.example.librarydashboard.repository.PostureLogRepository;
 import com.example.librarydashboard.repository.SeatRepository;
@@ -30,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -51,7 +54,9 @@ public class SeatApiService {
     private final SystemSettingRepository systemSettingRepository;
     private final DashboardOperationsStore dashboardOperationsStore;
     private final DeviceEventGateway deviceEventGateway;
+    private final ObjectStorageUrlResolver objectStorageUrlResolver;
     private final CheckInStatusService checkInStatusService;
+    private final StudentAccountStore studentAccountStore;
 
     public SeatApiService(
             SeatRepository seatRepository,
@@ -61,7 +66,9 @@ public class SeatApiService {
             SystemSettingRepository systemSettingRepository,
             DashboardOperationsStore dashboardOperationsStore,
             DeviceEventGateway deviceEventGateway,
-            CheckInStatusService checkInStatusService
+            ObjectStorageUrlResolver objectStorageUrlResolver,
+            CheckInStatusService checkInStatusService,
+            StudentAccountStore studentAccountStore
     ) {
         this.seatRepository = seatRepository;
         this.warningRepository = warningRepository;
@@ -70,25 +77,30 @@ public class SeatApiService {
         this.systemSettingRepository = systemSettingRepository;
         this.dashboardOperationsStore = dashboardOperationsStore;
         this.deviceEventGateway = deviceEventGateway;
+        this.objectStorageUrlResolver = objectStorageUrlResolver;
         this.checkInStatusService = checkInStatusService;
+        this.studentAccountStore = studentAccountStore;
     }
 
     public MessageResponse updateSeatStatus(SeatStatusUpdateRequest request) {
         Seat seat = ensureSeat(request.seatNum());
+        String previousStatus = seat.getStatus();
         boolean occupied = request.pressure() != null && request.pressure() > 0;
+        LocalDateTime sensorTimestamp = toLocalDateTime(request.timestamp());
 
         seat.setPressure(request.pressure());
-        seat.setOccupied(occupied);
-        seat.setStatus(occupied ? "OCCUPIED" : baseStatusFor(seat.isCheckedIn(), occupied));
-        seat.setUpdatedAt(request.timestamp());
+        updateSeatOccupancyState(seat, occupied, sensorTimestamp);
+        seat.setUpdatedAt(sensorTimestamp);
         seatRepository.save(seat);
 
         syncSeatToDashboard(seat);
+        appendSquattingWarningIfNeeded(seat, previousStatus, sensorTimestamp);
         return new MessageResponse("seat status updated");
     }
 
     public MessageResponse updatePosture(PostureUpdateRequest request) {
         Seat seat = ensureSeat(request.seatNum());
+        String previousStatus = seat.getStatus();
         LocalDateTime sensorTimestamp = toLocalDateTime(request.timestamp());
         LocalDateTime serverTimestamp = LocalDateTime.now();
         int combinedPressure = request.leftPressure() + request.rightPressure() + request.backPressure();
@@ -100,10 +112,7 @@ public class SeatApiService {
         seat.setPressure(combinedPressure);
         seat.setPosture(request.posture());
         seat.setPostureTimestamp(sensorTimestamp);
-        seat.setOccupied(occupied);
-        if (!"SQUATTING".equals(seat.getStatus()) && !"ABNORMAL".equals(seat.getStatus())) {
-            seat.setStatus(baseStatusFor(seat.isCheckedIn(), occupied));
-        }
+        updateSeatOccupancyState(seat, occupied, sensorTimestamp);
         seat.setUpdatedAt(serverTimestamp);
         seatRepository.save(seat);
 
@@ -117,6 +126,7 @@ public class SeatApiService {
         ));
 
         syncSeatToDashboard(seat);
+        appendSquattingWarningIfNeeded(seat, previousStatus, sensorTimestamp);
         return new MessageResponse("posture updated");
     }
 
@@ -128,6 +138,7 @@ public class SeatApiService {
         seat.setCheckedIn(true);
         seat.setOccupied(false);
         seat.setStatus(status);
+        seat.setVacantSince(now);
         seat.setUpdatedAt(now);
         seatRepository.save(seat);
 
@@ -143,6 +154,37 @@ public class SeatApiService {
         syncSeatToDashboard(seat);
         syncWarningToDashboard(warning);
         return new MessageResponse("squatting updated");
+    }
+
+    public MessageResponse resetDemoState() {
+        warningRepository.deleteAllInBatch();
+        lostItemRepository.deleteAllInBatch();
+        postureLogRepository.deleteAllInBatch();
+
+        LocalDateTime now = LocalDateTime.now();
+        for (int seatNum = 1; seatNum <= 4; seatNum++) {
+            Seat seat = ensureSeat(seatNum);
+            seat.setPressure(0);
+            seat.setStatus("AVAILABLE");
+            seat.setCheckedIn(false);
+            seat.setOccupied(false);
+            seat.setPosture("정상");
+            seat.setLeftPressure(0);
+            seat.setRightPressure(0);
+            seat.setBackPressure(0);
+            seat.setPostureTimestamp(null);
+            seat.setVacantSince(null);
+            seat.setUpdatedAt(now);
+            seatRepository.save(seat);
+            syncSeatToDashboard(seat);
+        }
+
+        dashboardOperationsStore.clearAlertHistory();
+        dashboardOperationsStore.clearLostItems();
+        dashboardOperationsStore.clearSensorLogs();
+        studentAccountStore.resetForTesting();
+
+        return new MessageResponse("demo state reset");
     }
 
     public MessageResponse saveLostItem(LostItemSaveRequest request) {
@@ -201,7 +243,7 @@ public class SeatApiService {
                         item.getId(),
                         item.getSeatNum(),
                         item.getCategory(),
-                        item.getImageUrl(),
+                        objectStorageUrlResolver.resolveReadUrl(item.getImageUrl()),
                         item.getDetectedTime(),
                         item.getStatus()
                 ))
@@ -266,6 +308,7 @@ public class SeatApiService {
                         0,
                         0,
                         null,
+                        null,
                         LocalDateTime.now()
                 )));
     }
@@ -298,10 +341,15 @@ public class SeatApiService {
                     0,
                     0,
                     now,
+                    null,
                     now
             ));
         }
         ensureDefaultThreshold();
+    }
+
+    public void syncSeatToDashboardState(Seat seat) {
+        syncSeatToDashboard(seat);
     }
 
     private void ensureDefaultThreshold() {
@@ -324,15 +372,15 @@ public class SeatApiService {
         target.put("lastUpdated", formatDashboardTime(seat.getUpdatedAt()));
         target.put("detectedAt", formatDashboardTime(seat.getUpdatedAt()));
         target.put("abnormal", abnormal);
-        target.put("issueType", abnormal ? "발권 상태에서 사람 미감지" : "정상 이용");
-        target.put("notes", abnormal ? "사석화 기준 시간 이상 지속" : "정상 이용 중");
+        target.put("issueType", dashboardIssueType(seat.getStatus()));
+        target.put("notes", dashboardNotes(seat.getStatus()));
         target.put("actionStatus", abnormal ? "대기" : "정상");
         target.put("pressureValue", seat.getPressure() == null ? 0.0d : seat.getPressure().doubleValue());
         target.put("personDetected", seat.isOccupied());
         target.put("objectDetected", false);
         target.put("cameraConfidence", seat.isOccupied() ? 0.95d : 0.82d);
         target.put("gateway", "edge-ec2");
-        target.put("durationMinutes", abnormal ? getSquattingThresholdMinutes() : 0);
+        target.put("durationMinutes", calculateVacantMinutes(seat));
         target.put("sensorHint", sensorHint(seat));
         target.put("checkedIn", seat.isCheckedIn());
         target.put("posture", defaultPosture(seat.getPosture()));
@@ -412,27 +460,30 @@ public class SeatApiService {
 
     private String normalizeSquattingStatus(String status) {
         if ("abnormal".equalsIgnoreCase(status)) {
-            return "ABNORMAL";
+            return "VACANT_LONG";
         }
-        return "SQUATTING";
+        return "VACANT_LONG";
     }
 
     private boolean isAbnormalStatus(String status) {
-        return "SQUATTING".equals(status) || "ABNORMAL".equals(status);
+        return "VACANT_LONG".equals(status) || "OBJECT_ONLY".equals(status) || "SENSOR_DELAY".equals(status);
     }
 
     private String statusLabel(String status) {
         return switch (status) {
             case "OCCUPIED" -> "사용 중";
             case "AVAILABLE", "EMPTY" -> "비어있음";
-            case "SQUATTING", "ABNORMAL" -> "사석화";
+            case "RESERVED" -> "발권됨";
+            case "VACANT_LONG" -> "장시간 비움";
+            case "OBJECT_ONLY" -> "물품 감지";
+            case "SENSOR_DELAY" -> "센서 지연";
             default -> status;
         };
     }
 
     private String baseStatusFor(boolean checkedIn, boolean occupied) {
         if (checkedIn && !occupied) {
-            return "AVAILABLE";
+            return "RESERVED";
         }
         return occupied ? "OCCUPIED" : "AVAILABLE";
     }
@@ -471,6 +522,84 @@ public class SeatApiService {
     }
 
     private LocalDateTime toLocalDateTime(OffsetDateTime offsetDateTime) {
-        return offsetDateTime.toLocalDateTime();
+        return offsetDateTime.atZoneSameInstant(java.time.ZoneId.systemDefault()).toLocalDateTime();
+    }
+
+    private void updateSeatOccupancyState(Seat seat, boolean occupied, LocalDateTime sensorTimestamp) {
+        seat.setOccupied(occupied);
+        if (occupied) {
+            seat.setVacantSince(null);
+            seat.setStatus("OCCUPIED");
+            return;
+        }
+
+        if (!seat.isCheckedIn()) {
+            seat.setVacantSince(null);
+            seat.setStatus("AVAILABLE");
+            return;
+        }
+
+        if (seat.getVacantSince() == null) {
+            seat.setVacantSince(sensorTimestamp);
+        }
+
+        long vacantMinutes = ChronoUnit.MINUTES.between(seat.getVacantSince(), sensorTimestamp);
+        if (vacantMinutes >= getSquattingThresholdMinutes()) {
+            seat.setStatus("VACANT_LONG");
+            return;
+        }
+
+        seat.setStatus(baseStatusFor(true, false));
+    }
+
+    private void appendSquattingWarningIfNeeded(Seat seat, String previousStatus, LocalDateTime eventTime) {
+        if (!"VACANT_LONG".equals(seat.getStatus()) || "VACANT_LONG".equals(previousStatus)) {
+            return;
+        }
+
+        Warning warning = warningRepository.save(new Warning(
+                seat,
+                seat.getSeatNum(),
+                "VACANT_LONG",
+                "vacant_long",
+                "Seat " + seat.getSeatNum() + " exceeded vacant threshold",
+                eventTime
+        ));
+        syncWarningToDashboard(warning);
+        prependSensorLog(
+                "VACANT_LONG",
+                seatCode(seat.getSeatNum()),
+                "edge-ec2",
+                String.valueOf(calculateVacantMinutes(seat)),
+                "발권 후 압력 미감지 시간이 기준을 초과했습니다.",
+                "지연"
+        );
+    }
+
+    private int calculateVacantMinutes(Seat seat) {
+        if (!seat.isCheckedIn() || seat.isOccupied() || seat.getVacantSince() == null) {
+            return 0;
+        }
+        return (int) Math.max(0, ChronoUnit.MINUTES.between(seat.getVacantSince(), seat.getUpdatedAt()));
+    }
+
+    private String dashboardIssueType(String status) {
+        return switch (status) {
+            case "RESERVED" -> "발권 후 미착석";
+            case "VACANT_LONG" -> "장시간 자리 비움";
+            case "OBJECT_ONLY" -> "물품만 감지됨";
+            case "SENSOR_DELAY" -> "센서 수집 지연";
+            default -> "정상 이용";
+        };
+    }
+
+    private String dashboardNotes(String status) {
+        return switch (status) {
+            case "RESERVED" -> "학생이 좌석을 선택했지만 아직 착석이 감지되지 않았습니다.";
+            case "VACANT_LONG" -> "발권 또는 착석 이력 이후 압력 미감지 시간이 기준을 초과했습니다.";
+            case "OBJECT_ONLY" -> "사람 없이 물품만 감지된 좌석입니다.";
+            case "SENSOR_DELAY" -> "센서 데이터 수집이 지연되고 있습니다.";
+            default -> "정상 이용 중";
+        };
     }
 }

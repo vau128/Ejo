@@ -17,6 +17,7 @@
 
     <properties>
         <java.version>17</java.version>
+        <aws.sdk.version>2.25.70</aws.sdk.version>
     </properties>
 
     <dependencies>
@@ -50,6 +51,11 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws.sdk.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

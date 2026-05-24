@@ -3,6 +3,9 @@ import boto3
 import os
 import requests # API 통신을 위한 라이브러리
 import json # JSON 데이터를 파싱하기 위한 라이브러리
+import atexit
+import signal
+import sys
 from datetime import datetime, timezone
 from ultralytics import YOLO
 import paho.mqtt.client as mqtt
@@ -25,11 +28,13 @@ BUCKET_NAME = "new-ejo-bucket"
 CAM_URL = "rtsp://abcd1234:00001234@172.20.10.10:554/stream1"
 
 # 백엔드 실제 API 주소 반영
-BASE_URL = "http://13.209.33.104:8080"
+BASE_URL = os.getenv("IOT_BACKEND_BASE_URL", "http://13.209.33.104:8080")
 FASTAPI_SQUATTING_URL = f"{BASE_URL}/api/seat/squatting"
 FASTAPI_LOST_ITEM_URL = f"{BASE_URL}/api/seat/lost-item"
 FASTAPI_POSTURE_URL = f"{BASE_URL}/api/seat/posture"
+FASTAPI_STATUS_URL = f"{BASE_URL}/api/seat/status"
 FASTAPI_CHECKIN_STATUS_URL = f"{BASE_URL}/api/seat/check-in-status"
+FASTAPI_RESET_DEMO_URL = f"{BASE_URL}/api/testing/reset-demo-state"
 
 # 라즈베리 파이 담당 좌석 번호 (CCTV 모드에서는 자동 계산하므로 주석 처리)
 # PI_SEAT_NUM = 2 
@@ -43,6 +48,7 @@ s3_client = boto3.client(
 )
 
 squatting_timers = {}
+shutdown_started = False
 # ⚠️ 현재 테스트를 위해 10초로 변경 (관리자가 변경하면 이 값이 업데이트 됨)
 SQUATTING_LIMIT = 10  
 
@@ -60,6 +66,57 @@ def trigger_squatting(seat_num):
             print(f"[ERROR] Failed to send status. HTTP Code: {response.status_code}")
     except Exception as e:
         print(f"[ERROR] Cannot connect to main server: {e}")
+
+
+def send_empty_status(seat_num):
+    current_time_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    payload = {
+        "seat_num": seat_num,
+        "pressure": 0,
+        "timestamp": current_time_iso
+    }
+    try:
+        response = requests.post(FASTAPI_STATUS_URL, json=payload)
+        if response.status_code == 200:
+            print(f"[SUCCESS] Empty status sent! (Seat {seat_num})")
+        else:
+            print(f"[ERROR] Empty status API failed. HTTP Code: {response.status_code}, Response: {response.text}")
+    except Exception as e:
+        print(f"[ERROR] Failed to connect to server for empty status API: {e}")
+
+
+def cancel_all_squatting_timers():
+    for seat_num, timer in list(squatting_timers.items()):
+        print(f"[TIMER] Canceling squatting timer for seat {seat_num}.")
+        timer.cancel()
+        del squatting_timers[seat_num]
+
+
+def reset_demo_state(reason):
+    print(f"[TEST] Resetting demo state ({reason})...")
+    cancel_all_squatting_timers()
+    try:
+        response = requests.post(FASTAPI_RESET_DEMO_URL, timeout=3)
+        if response.status_code == 200:
+            print("[SUCCESS] Demo state reset completed.")
+        else:
+            print(f"[ERROR] Demo state reset failed. HTTP Code: {response.status_code}, Response: {response.text}")
+    except Exception as e:
+        print(f"[ERROR] Failed to reset demo state: {e}")
+
+
+def handle_shutdown(signum=None, frame=None):
+    global shutdown_started
+
+    if shutdown_started:
+        return
+    shutdown_started = True
+
+    signal_name = "process exit" if signum is None else signal.Signals(signum).name
+    reset_demo_state(f"iot shutdown: {signal_name}")
+
+    if signum is not None:
+        sys.exit(0)
 
 # ----------------------------------------------------
 # [3. 분실물 탐지 및 좌표(ROI) 기반 다중 좌석 맵핑]
@@ -141,8 +198,7 @@ def check_lost_items():
             local_filename, BUCKET_NAME, s3_key,
             ExtraArgs={'ACL': 'public-read', 'ContentType': 'image/jpeg'}
         )
-        s3_url = f"https://{BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
-        print(f"[SUCCESS] S3 Upload successful! URL: {s3_url}")
+        print(f"[SUCCESS] S3 Upload successful! KEY: {s3_key}")
         
         # 6. 메인 서버로 분실물 결과 개별 전송 (각자의 좌석 번호로 발송!)
         print(f"[API] Sending lost item data to server one by one...")
@@ -153,7 +209,7 @@ def check_lost_items():
         for item in unique_items:
             lost_item_payload = {
                 "seat_num": item["seat_num"], # 계산된 실제 좌석 번호
-                "image_url": s3_url,          # 동일한 CCTV 전체 샷 이미지
+                "image_url": s3_key,          # DB에는 공개 URL 대신 S3 key만 저장
                 "category": item["category"]  # 탐지된 물건 카테고리
             }
             
@@ -192,6 +248,7 @@ def on_message(client, userdata, msg):
             # [상태 B] 사람이 일어난 경우 (status: 0 이 넘어옴)
             if "status" in data and data["status"] == 0:
                 print(f"[Seat {seat_num}] Empty seat detected. Checking app status...")
+                send_empty_status(seat_num)
                 
                 # 백엔드에 현재 발권(체크인) 상태인지 물어보는 검증 로직
                 is_checked_in = True # 기본값 (API 통신 실패 시 테스트를 위해 True로 둠)
@@ -281,6 +338,11 @@ def on_message(client, userdata, msg):
 # [5. 메인 실행]
 # ----------------------------------------------------
 if __name__ == "__main__":
+    atexit.register(handle_shutdown)
+    signal.signal(signal.SIGINT, handle_shutdown)
+    signal.signal(signal.SIGTERM, handle_shutdown)
+    reset_demo_state("iot startup")
+
     # 버전 명시 추가 (DeprecationWarning 경고 제거)
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
     
