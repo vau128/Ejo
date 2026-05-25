@@ -4,15 +4,10 @@ import com.example.librarydashboard.config.AwsStorageProperties;
 import com.example.librarydashboard.port.out.ObjectStorageUrlResolver;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
+import java.net.URLEncoder;
 import java.net.URI;
-import java.time.Duration;
+import java.nio.charset.StandardCharsets;
 
 @Component
 @ConditionalOnProperty(prefix = "app.aws", name = "enabled", havingValue = "true")
@@ -33,29 +28,7 @@ public class S3ObjectStorageUrlResolver implements ObjectStorageUrlResolver {
             return storedValue;
         }
 
-        AwsBasicCredentials credentials = AwsBasicCredentials.create(
-                properties.accessKey(),
-                properties.secretKey()
-        );
-
-        try (S3Presigner presigner = S3Presigner.builder()
-                .region(Region.of(properties.region()))
-                .credentialsProvider(StaticCredentialsProvider.create(credentials))
-                .build()) {
-            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
-                    .bucket(properties.s3Bucket())
-                    .key(storedValue)
-                    .build();
-
-            GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                    .signatureDuration(Duration.ofMinutes(15))
-                    .getObjectRequest(getObjectRequest)
-                    .build();
-
-            return presigner.presignGetObject(presignRequest).url().toString();
-        } catch (RuntimeException exception) {
-            return storedValue;
-        }
+        return buildPublicObjectUrl(storedValue);
     }
 
     private boolean looksLikeAbsoluteUrl(String value) {
@@ -65,5 +38,27 @@ public class S3ObjectStorageUrlResolver implements ObjectStorageUrlResolver {
         } catch (IllegalArgumentException exception) {
             return false;
         }
+    }
+
+    private String buildPublicObjectUrl(String objectKey) {
+        String normalizedKey = objectKey.startsWith("/") ? objectKey.substring(1) : objectKey;
+        String encodedKey = encodePath(normalizedKey);
+        return "https://%s.s3.%s.amazonaws.com/%s".formatted(
+                properties.s3Bucket(),
+                properties.region(),
+                encodedKey
+        );
+    }
+
+    private String encodePath(String path) {
+        String[] segments = path.split("/");
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < segments.length; i++) {
+            if (i > 0) {
+                builder.append('/');
+            }
+            builder.append(URLEncoder.encode(segments[i], StandardCharsets.UTF_8).replace("+", "%20"));
+        }
+        return builder.toString();
     }
 }
