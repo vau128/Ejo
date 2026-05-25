@@ -128,12 +128,16 @@ class AppState extends ChangeNotifier {
     switch (status) {
       case SeatStatus.available:
         return '빈 좌석';
+      case SeatStatus.reserved:
+        return '발권됨';
       case SeatStatus.occupied:
         return '사용 중';
-      case SeatStatus.squatting:
-        return '사석화';
-      case SeatStatus.abnormal:
-        return '비정상';
+      case SeatStatus.objectOnly:
+        return '물품 감지';
+      case SeatStatus.vacantLong:
+        return '장시간 비움';
+      case SeatStatus.sensorDelay:
+        return '센서 지연';
     }
   }
 
@@ -145,11 +149,15 @@ class AppState extends ChangeNotifier {
     switch (seat.status) {
       case SeatStatus.available:
         return const Color(0xFFFBC02D);
+      case SeatStatus.reserved:
+        return const Color(0xFF1E88E5);
       case SeatStatus.occupied:
         return const Color(0xFF757575);
-      case SeatStatus.squatting:
+      case SeatStatus.objectOnly:
+        return const Color(0xFFFB8C00);
+      case SeatStatus.vacantLong:
         return const Color(0xFFD32F2F);
-      case SeatStatus.abnormal:
+      case SeatStatus.sensorDelay:
         return const Color(0xFF8E24AA);
     }
   }
@@ -186,12 +194,44 @@ class AppState extends ChangeNotifier {
   }
 
   Future<String?> refreshWarningAlerts() async {
+    final token = _authToken;
+    if (token == null) {
+      return '로그인이 필요합니다.';
+    }
+
     try {
-      _warningAlerts = await _api.fetchWarnings();
+      _warningAlerts = await _api.fetchWarnings(token);
+      _currentUser = _currentUser?.copyWith(warningCount: _warningAlerts.length);
       notifyListeners();
       return null;
     } on AppApiException catch (error) {
       return error.message;
+    }
+  }
+
+  Future<WarningAlert?> pollWarningAlerts() async {
+    final token = _authToken;
+    if (token == null) {
+      return null;
+    }
+
+    try {
+      final previousTopId = _warningAlerts.isEmpty ? null : _warningAlerts.first.id;
+      final nextWarnings = await _api.fetchWarnings(token);
+      _warningAlerts = nextWarnings;
+      _currentUser = _currentUser?.copyWith(warningCount: _warningAlerts.length);
+      notifyListeners();
+
+      if (nextWarnings.isEmpty) {
+        return null;
+      }
+
+      if (previousTopId == null || nextWarnings.first.id != previousTopId) {
+        return nextWarnings.first;
+      }
+      return null;
+    } on AppApiException {
+      return null;
     }
   }
 
@@ -216,7 +256,8 @@ class AppState extends ChangeNotifier {
     _currentUser = await _api.fetchCurrentUser(token);
     _seats = await _api.fetchSeats(token);
     _lostItemReports = await _api.fetchLostItems(token);
-    _warningAlerts = await _api.fetchWarnings();
+    _warningAlerts = await _api.fetchWarnings(token);
+    _currentUser = _currentUser?.copyWith(warningCount: _warningAlerts.length);
     _settings = await _api.fetchSettings(token);
   }
 

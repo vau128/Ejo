@@ -116,26 +116,12 @@ class AppApi {
     return AppSettings.fromJson(_map(json['settings']));
   }
 
-  Future<List<WarningAlert>> fetchWarnings() async {
-    final uri = Uri.parse('${ApiConfig.apiRootUrl}/warnings');
-    late final http.Response response;
-    try {
-      response = await http.get(
-        uri,
-        headers: const {'Accept': 'application/json'},
-      );
-    } catch (_) {
-      throw const AppApiException('알림을 불러오지 못했습니다.');
-    }
-
-    if (response.statusCode >= 400) {
-      throw const AppApiException('알림을 불러오지 못했습니다.');
-    }
-
-    final decoded = response.body.isEmpty
-        ? const []
-        : jsonDecode(response.body) as List<dynamic>;
-    return decoded.map((item) => WarningAlert.fromJson(_map(item))).toList();
+  Future<List<WarningAlert>> fetchWarnings(String token) async {
+    final json = await _request('GET', '/me/warnings', token: token);
+    final items = (json['warnings'] as List<dynamic>? ?? const [])
+        .map((item) => WarningAlert.fromJson(_map(item)))
+        .toList();
+    return items;
   }
 
   Future<Map<String, dynamic>> _request(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 
 import '../../services/app_state.dart';
 import 'lost_item_reports_screen.dart';
@@ -18,6 +19,41 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _currentIndex = 0;
+  Timer? _warningPollTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _warningPollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      if (!mounted) {
+        return;
+      }
+      final settings = widget.appState.settings;
+      if (!settings.pushEnabled || !settings.warningAlertEnabled) {
+        return;
+      }
+
+      final warning = await widget.appState.pollWarningAlerts();
+      if (!mounted || warning == null) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text('관리자 경고: ${warning.seatNumber}번 좌석 ${warning.message}'),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+    });
+  }
+
+  @override
+  void dispose() {
+    _warningPollTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

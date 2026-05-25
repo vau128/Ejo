@@ -3,6 +3,7 @@ package com.example.librarydashboard.service;
 import com.example.librarydashboard.dto.AppSettingsRequest;
 import com.example.librarydashboard.dto.StudentLoginRequest;
 import com.example.librarydashboard.dto.StudentSignupRequest;
+import com.example.librarydashboard.dto.seat.AlertResponse;
 import com.example.librarydashboard.entity.Seat;
 import com.example.librarydashboard.port.out.DeviceEventGateway;
 import com.example.librarydashboard.port.out.LostItemStore;
@@ -10,10 +11,12 @@ import com.example.librarydashboard.port.out.SeatStore;
 import com.example.librarydashboard.port.out.StudentAccountStore;
 import com.example.librarydashboard.port.out.UserSettingsStore;
 import com.example.librarydashboard.repository.SeatRepository;
+import com.example.librarydashboard.repository.WarningRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -32,6 +35,7 @@ public class AppService {
     private final DeviceEventGateway deviceEventGateway;
     private final SeatRepository seatRepository;
     private final SeatApiService seatApiService;
+    private final WarningRepository warningRepository;
 
     public AppService(
             StudentAccountStore studentAccountStore,
@@ -40,7 +44,8 @@ public class AppService {
             UserSettingsStore userSettingsStore,
             DeviceEventGateway deviceEventGateway,
             SeatRepository seatRepository,
-            SeatApiService seatApiService
+            SeatApiService seatApiService,
+            WarningRepository warningRepository
     ) {
         this.studentAccountStore = studentAccountStore;
         this.seatStore = seatStore;
@@ -49,6 +54,7 @@ public class AppService {
         this.deviceEventGateway = deviceEventGateway;
         this.seatRepository = seatRepository;
         this.seatApiService = seatApiService;
+        this.warningRepository = warningRepository;
     }
 
     public String resolveToken(String authorization, String studentToken) {
@@ -203,9 +209,34 @@ public class AppService {
 
     public Map<String, Object> getWarnings(String token) {
         Map<String, Object> user = requireUser(token);
+        String selectedSeatId = stringValue(user.get("selectedSeatId"));
+        if (selectedSeatId == null) {
+            user.put("warningCount", 0);
+            studentAccountStore.save(user);
+            return mapOf(
+                    "warningCount", 0,
+                    "warnings", List.of()
+            );
+        }
+
+        int seatNum = parseSeatNumber(selectedSeatId);
+        List<AlertResponse> warnings = warningRepository.findAllBySeatNumOrderByWarningTimeDesc(seatNum).stream()
+                .map(warning -> new AlertResponse(
+                        warning.getId(),
+                        warning.getSeatNum(),
+                        warning.getWarningType(),
+                        warning.getStatus(),
+                        warning.getMessage(),
+                        warning.getWarningTime()
+                ))
+                .sorted(Comparator.comparing(AlertResponse::warningTime).reversed())
+                .toList();
+
+        user.put("warningCount", warnings.size());
+        studentAccountStore.save(user);
         return mapOf(
-                "warningCount", user.get("warningCount"),
-                "message", "장시간 자리 비움, 좌석 규정 위반 등의 기록이 누적되면 경고가 반영됩니다."
+                "warningCount", warnings.size(),
+                "warnings", warnings
         );
     }
 

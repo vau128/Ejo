@@ -56,6 +56,14 @@ public class InMemoryStudentAccountStore implements StudentAccountStore {
     }
 
     @Override
+    public Optional<Map<String, Object>> findBySelectedSeatId(String seatId) {
+        return studentsByEmail.values().stream()
+                .filter(user -> seatId.equals(user.get("selectedSeatId")))
+                .findFirst()
+                .map(LinkedHashMap::new);
+    }
+
+    @Override
     public void saveSessionToken(String token, String userId) {
         userIdByToken.put(token, userId);
     }

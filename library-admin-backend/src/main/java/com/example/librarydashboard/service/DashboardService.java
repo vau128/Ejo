@@ -3,9 +3,12 @@ package com.example.librarydashboard.service;
 import com.example.librarydashboard.dto.IotSeatStatusRequest;
 import com.example.librarydashboard.dto.SettingsUpdateRequest;
 import com.example.librarydashboard.entity.Seat;
+import com.example.librarydashboard.entity.Warning;
 import com.example.librarydashboard.port.out.DashboardOperationsStore;
 import com.example.librarydashboard.port.out.DeviceEventGateway;
 import com.example.librarydashboard.port.out.NotificationGateway;
+import com.example.librarydashboard.port.out.StudentAccountStore;
+import com.example.librarydashboard.repository.WarningRepository;
 import com.example.librarydashboard.repository.SeatRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -31,17 +34,23 @@ public class DashboardService {
     private final DeviceEventGateway deviceEventGateway;
     private final NotificationGateway notificationGateway;
     private final SeatRepository seatRepository;
+    private final WarningRepository warningRepository;
+    private final StudentAccountStore studentAccountStore;
 
     public DashboardService(
             DashboardOperationsStore dashboardOperationsStore,
             DeviceEventGateway deviceEventGateway,
             NotificationGateway notificationGateway,
-            SeatRepository seatRepository
+            SeatRepository seatRepository,
+            WarningRepository warningRepository,
+            StudentAccountStore studentAccountStore
     ) {
         this.dashboardOperationsStore = dashboardOperationsStore;
         this.deviceEventGateway = deviceEventGateway;
         this.notificationGateway = notificationGateway;
         this.seatRepository = seatRepository;
+        this.warningRepository = warningRepository;
+        this.studentAccountStore = studentAccountStore;
     }
 
     public Map<String, Object> getOverview() {
@@ -92,9 +101,25 @@ public class DashboardService {
 
     public Map<String, Object> sendWarning(String seatId) {
         Map<String, Object> seat = findSeatView(seatId);
+        Seat seatEntity = findSeatEntity(seatId);
+        LocalDateTime now = LocalDateTime.now();
+        Warning warning = warningRepository.save(new Warning(
+                seatEntity,
+                seatEntity.getSeatNum(),
+                "ADMIN_WARNING",
+                "ADMIN_WARNING",
+                seatEntity.getSeatNum() + "번 좌석에 관리자 경고가 발송되었습니다.",
+                now
+        ));
+        studentAccountStore.findBySelectedSeatId(seatId).ifPresent(student -> {
+            Object countValue = student.get("warningCount");
+            int nextCount = countValue instanceof Number ? ((Number) countValue).intValue() + 1 : 1;
+            student.put("warningCount", nextCount);
+            studentAccountStore.save(student);
+        });
         addHistory(seatId, "경고 전송", "앱 푸시", "전송 완료", "좌석 상태 이상으로 경고 메시지를 발송했습니다.");
         addSensorLog("ALERT_PUSH", seatId, "edge-rpi-03", "warn", "관리자 경고 메시지 전송", "정상");
-        notificationGateway.sendStudentNotification("masked-student", "좌석 경고", "좌석 상태 이상으로 경고가 발송되었습니다.", mapOf("seatId", seatId));
+        notificationGateway.sendStudentNotification("masked-student", "좌석 경고", warning.getMessage(), mapOf("seatId", seatId));
         return message("경고를 전송했습니다.");
     }
 

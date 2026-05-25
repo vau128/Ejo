@@ -256,7 +256,9 @@ public class SeatApiService {
                 .map(warning -> new AlertResponse(
                         warning.getId(),
                         warning.getSeatNum(),
+                        warning.getWarningType(),
                         warning.getStatus(),
+                        warning.getMessage(),
                         warning.getWarningTime()
                 ))
                 .toList();

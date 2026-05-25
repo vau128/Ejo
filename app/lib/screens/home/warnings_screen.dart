@@ -113,7 +113,9 @@ class _WarningCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              _descriptionForStatus(warning.status),
+              warning.message.isNotEmpty
+                  ? warning.message
+                  : _descriptionForStatus(warning.status),
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 12),
@@ -173,6 +175,8 @@ String _titleForStatus(String status) {
       return '사석화 경고';
     case 'abnormal':
       return '비정상 좌석 경고';
+    case 'admin_warning':
+      return '관리자 경고';
     default:
       return '경고';
   }
@@ -184,6 +188,8 @@ String _descriptionForStatus(String status) {
       return '좌석을 비운 지 설정 시간이 지나 경고가 발생했습니다.';
     case 'abnormal':
       return '좌석 상태가 비정상으로 감지되어 확인이 필요합니다.';
+    case 'admin_warning':
+      return '관리자가 좌석 상태 이상을 확인하고 경고를 발송했습니다.';
     default:
       return '좌석 상태 이상이 감지되었습니다.';
   }
