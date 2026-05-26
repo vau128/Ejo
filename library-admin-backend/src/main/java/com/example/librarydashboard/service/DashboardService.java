@@ -7,6 +7,7 @@ import com.example.librarydashboard.entity.Warning;
 import com.example.librarydashboard.port.out.DashboardOperationsStore;
 import com.example.librarydashboard.port.out.DeviceEventGateway;
 import com.example.librarydashboard.port.out.NotificationGateway;
+import com.example.librarydashboard.port.out.ObjectStorageUrlResolver;
 import com.example.librarydashboard.port.out.StudentAccountStore;
 import com.example.librarydashboard.repository.WarningRepository;
 import com.example.librarydashboard.repository.SeatRepository;
@@ -33,6 +34,7 @@ public class DashboardService {
     private final DashboardOperationsStore dashboardOperationsStore;
     private final DeviceEventGateway deviceEventGateway;
     private final NotificationGateway notificationGateway;
+    private final ObjectStorageUrlResolver objectStorageUrlResolver;
     private final SeatRepository seatRepository;
     private final WarningRepository warningRepository;
     private final StudentAccountStore studentAccountStore;
@@ -41,6 +43,7 @@ public class DashboardService {
             DashboardOperationsStore dashboardOperationsStore,
             DeviceEventGateway deviceEventGateway,
             NotificationGateway notificationGateway,
+            ObjectStorageUrlResolver objectStorageUrlResolver,
             SeatRepository seatRepository,
             WarningRepository warningRepository,
             StudentAccountStore studentAccountStore
@@ -48,6 +51,7 @@ public class DashboardService {
         this.dashboardOperationsStore = dashboardOperationsStore;
         this.deviceEventGateway = deviceEventGateway;
         this.notificationGateway = notificationGateway;
+        this.objectStorageUrlResolver = objectStorageUrlResolver;
         this.seatRepository = seatRepository;
         this.warningRepository = warningRepository;
         this.studentAccountStore = studentAccountStore;
@@ -336,7 +340,9 @@ public class DashboardService {
     }
 
     public Map<String, Object> getLostItems() {
-        List<Map<String, Object>> lostItems = dashboardOperationsStore.findLostItems();
+        List<Map<String, Object>> lostItems = dashboardOperationsStore.findLostItems().stream()
+                .map(this::resolveLostItemImageUrl)
+                .toList();
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("openCount", lostItems.stream().filter(item -> Objects.equals(item.get("status"), "보관 중")).count());
         summary.put("claimedToday", lostItems.stream().filter(item -> Objects.equals(item.get("status"), "인계 완료")).count());
@@ -346,6 +352,15 @@ public class DashboardService {
         response.put("summary", summary);
         response.put("items", lostItems);
         return response;
+    }
+
+    private Map<String, Object> resolveLostItemImageUrl(Map<String, Object> item) {
+        Map<String, Object> resolved = new LinkedHashMap<>(item);
+        Object imageUrl = resolved.get("imageUrl");
+        if (imageUrl instanceof String value) {
+            resolved.put("imageUrl", objectStorageUrlResolver.resolveReadUrl(value));
+        }
+        return resolved;
     }
 
     public Map<String, Object> updateLostItemStatus(String itemId, String status) {

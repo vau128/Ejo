@@ -53,19 +53,18 @@ export default function LostItemsPage() {
         <MetricCard label="최근 스캔" value={data[0]?.detected_time ? '완료' : '대기'} helper="관리자 수동 트리거" accent="emerald" />
       </div>
 
-      <SectionCard title="분실물 목록" subtitle="카테고리, 좌석 번호, 이미지 URL, 감지 시각을 보여줍니다." className="mt-6">
+      <SectionCard title="분실물 목록" subtitle="종류, 좌석 번호, 감지 시각을 보여줍니다." className="mt-6">
         <div className="grid gap-4 lg:grid-cols-2">
           {data.map((item) => (
             <div key={item.item_id} className="rounded-[24px] border border-slate-200 p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-lg font-semibold text-slate-800">{item.category}</p>
+                  <p className="text-lg font-semibold text-slate-800">종류: {item.category}</p>
                   <p className="mt-1 text-sm text-slate-500">좌석 {item.seat_num} · {formatDate(item.detected_time)}</p>
                 </div>
                 <StatusBadge>{item.status}</StatusBadge>
               </div>
               <div className="mt-4 grid gap-2 text-sm text-slate-600">
-                <p>이미지 URL: <a href={item.image_url} target="_blank" rel="noreferrer" className="text-brand-700 underline">{item.image_url}</a></p>
                 <p>감지 시각: {formatDate(item.detected_time)}</p>
               </div>
               <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">

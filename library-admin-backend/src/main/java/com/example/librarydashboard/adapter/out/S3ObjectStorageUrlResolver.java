@@ -15,6 +15,7 @@ import java.net.URLEncoder;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Locale;
 
 @Component
 @ConditionalOnProperty(prefix = "app.aws", name = "enabled", havingValue = "true")
@@ -39,6 +40,10 @@ public class S3ObjectStorageUrlResolver implements ObjectStorageUrlResolver {
             return storedValue;
         }
         if (looksLikeAbsoluteUrl(storedValue)) {
+            String objectKey = extractManagedObjectKey(storedValue);
+            if (objectKey != null) {
+                return buildPresignedObjectUrl(objectKey);
+            }
             return storedValue;
         }
 
@@ -65,6 +70,39 @@ public class S3ObjectStorageUrlResolver implements ObjectStorageUrlResolver {
                 .getObjectRequest(getObjectRequest)
                 .build();
         return presigner.presignGetObject(presignRequest).url().toString();
+    }
+
+    private String extractManagedObjectKey(String storedValue) {
+        try {
+            URI uri = URI.create(storedValue);
+            String host = uri.getHost();
+            if (host == null) {
+                return null;
+            }
+
+            String bucket = properties.s3Bucket();
+            String normalizedHost = host.toLowerCase(Locale.ROOT);
+            String virtualHostedPrefix = (bucket + ".s3.").toLowerCase(Locale.ROOT);
+            String pathStyleSegment = "/" + bucket + "/";
+
+            if (normalizedHost.startsWith(virtualHostedPrefix)) {
+                String path = uri.getPath();
+                return path == null ? null : trimLeadingSlash(path);
+            }
+
+            String path = uri.getPath();
+            if (path != null && path.startsWith(pathStyleSegment)) {
+                return path.substring(pathStyleSegment.length());
+            }
+
+            return null;
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    private String trimLeadingSlash(String value) {
+        return value.startsWith("/") ? value.substring(1) : value;
     }
 
     @SuppressWarnings("unused")

@@ -57,6 +57,7 @@ public class SeatApiService {
     private final SystemSettingRepository systemSettingRepository;
     private final DashboardOperationsStore dashboardOperationsStore;
     private final DeviceEventGateway deviceEventGateway;
+    private final IotAdminTriggerClient iotAdminTriggerClient;
     private final ObjectStorageUrlResolver objectStorageUrlResolver;
     private final CheckInStatusService checkInStatusService;
     private final StudentAccountStore studentAccountStore;
@@ -69,6 +70,7 @@ public class SeatApiService {
             SystemSettingRepository systemSettingRepository,
             DashboardOperationsStore dashboardOperationsStore,
             DeviceEventGateway deviceEventGateway,
+            IotAdminTriggerClient iotAdminTriggerClient,
             ObjectStorageUrlResolver objectStorageUrlResolver,
             CheckInStatusService checkInStatusService,
             StudentAccountStore studentAccountStore
@@ -80,6 +82,7 @@ public class SeatApiService {
         this.systemSettingRepository = systemSettingRepository;
         this.dashboardOperationsStore = dashboardOperationsStore;
         this.deviceEventGateway = deviceEventGateway;
+        this.iotAdminTriggerClient = iotAdminTriggerClient;
         this.objectStorageUrlResolver = objectStorageUrlResolver;
         this.checkInStatusService = checkInStatusService;
         this.studentAccountStore = studentAccountStore;
@@ -213,10 +216,17 @@ public class SeatApiService {
             ));
             prependSensorLog("LOST_ITEM_SCAN", "ADMIN", "dashboard-web", request.command(), "분실물 스캔 명령을 전송했습니다.", "정상");
             return new MessageResponse("lost item scan triggered");
-        } catch (RuntimeException exception) {
-            log.error("Failed to publish lost item scan command", exception);
-            prependSensorLog("LOST_ITEM_SCAN", "ADMIN", "dashboard-web", request.command(), "분실물 스캔 명령 전송에 실패했습니다.", "오류");
-            return new MessageResponse("분실물 스캔 명령 저장은 완료됐지만 라즈베리파이 전송에 실패했습니다.");
+        } catch (RuntimeException mqttException) {
+            log.error("Failed to publish lost item scan command over MQTT", mqttException);
+            try {
+                iotAdminTriggerClient.triggerLostItemScan(request.command());
+                prependSensorLog("LOST_ITEM_SCAN", "ADMIN", "dashboard-web", request.command(), "분실물 스캔 명령을 HTTP fallback으로 전송했습니다.", "정상");
+                return new MessageResponse("lost item scan triggered");
+            } catch (RuntimeException httpException) {
+                log.error("Failed to publish lost item scan command over HTTP fallback", httpException);
+                prependSensorLog("LOST_ITEM_SCAN", "ADMIN", "dashboard-web", request.command(), "분실물 스캔 명령 전송에 실패했습니다.", "오류");
+                return new MessageResponse("분실물 스캔 요청은 접수됐지만 라즈베리파이 전송에 실패했습니다.");
+            }
         }
     }
 
@@ -427,7 +437,7 @@ public class SeatApiService {
         lostItem.put("description", item.getCategory());
         lostItem.put("status", item.getStatus());
         lostItem.put("custodian", "IoT 자동 등록");
-        lostItem.put("imageUrl", item.getImageUrl());
+        lostItem.put("imageUrl", objectStorageUrlResolver.resolveReadUrl(item.getImageUrl()));
         dashboardOperationsStore.saveLostItem(lostItem);
     }
 

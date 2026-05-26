@@ -59,7 +59,10 @@ public class MqttDeviceEventGateway implements DeviceEventGateway {
                 client.close();
             }
         } catch (MqttException e) {
-            throw new IllegalStateException("Failed to publish MQTT message to topic " + topic, e);
+            throw new IllegalStateException(
+                    "Failed to publish MQTT message to topic " + topic + " via broker " + properties.brokerUrl(),
+                    e
+            );
         }
     }
 

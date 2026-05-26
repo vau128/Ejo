@@ -68,7 +68,7 @@ class _ReportCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text('감지 시간 ${_formatDateTime(report.detectedAt)}'),
                 const SizedBox(height: 6),
-                Text('분류 태그: ${report.classificationStatus}'),
+                Text('종류: ${report.classificationStatus}'),
               ],
             ),
           ),
