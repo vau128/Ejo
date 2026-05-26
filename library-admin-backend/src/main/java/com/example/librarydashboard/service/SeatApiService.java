@@ -27,6 +27,8 @@ import com.example.librarydashboard.repository.PostureLogRepository;
 import com.example.librarydashboard.repository.SeatRepository;
 import com.example.librarydashboard.repository.SystemSettingRepository;
 import com.example.librarydashboard.repository.WarningRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +48,7 @@ public class SeatApiService {
     private static final String SQUATTING_THRESHOLD_KEY = "squatting_threshold_minutes";
     private static final int DEFAULT_SQUATTING_THRESHOLD_MINUTES = 60;
     private static final DateTimeFormatter DASHBOARD_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm", Locale.KOREAN);
+    private static final Logger log = LoggerFactory.getLogger(SeatApiService.class);
 
     private final SeatRepository seatRepository;
     private final WarningRepository warningRepository;
@@ -203,12 +206,18 @@ public class SeatApiService {
     }
 
     public MessageResponse triggerLostItemScan(LostItemScanTriggerRequest request) {
-        deviceEventGateway.publishCommand("admin/trigger_lost_item", Map.of(
-                "command", request.command(),
-                "triggeredAt", LocalDateTime.now().toString()
-        ));
-        prependSensorLog("LOST_ITEM_SCAN", "ADMIN", "dashboard-web", request.command(), "분실물 스캔 명령을 전송했습니다.", "정상");
-        return new MessageResponse("lost item scan triggered");
+        try {
+            deviceEventGateway.publishCommand("admin/trigger_lost_item", Map.of(
+                    "command", request.command(),
+                    "triggeredAt", LocalDateTime.now().toString()
+            ));
+            prependSensorLog("LOST_ITEM_SCAN", "ADMIN", "dashboard-web", request.command(), "분실물 스캔 명령을 전송했습니다.", "정상");
+            return new MessageResponse("lost item scan triggered");
+        } catch (RuntimeException exception) {
+            log.error("Failed to publish lost item scan command", exception);
+            prependSensorLog("LOST_ITEM_SCAN", "ADMIN", "dashboard-web", request.command(), "분실물 스캔 명령 전송에 실패했습니다.", "오류");
+            return new MessageResponse("분실물 스캔 명령 저장은 완료됐지만 라즈베리파이 전송에 실패했습니다.");
+        }
     }
 
     @Transactional(readOnly = true)
@@ -279,8 +288,13 @@ public class SeatApiService {
         Map<String, Object> settings = dashboardOperationsStore.getSettings();
         settings.put("squattingThresholdMinutes", thresholdMinutes);
         dashboardOperationsStore.saveSettings(settings);
-        deviceEventGateway.publishCommand("admin/config/squatting_time", squattingThresholdPayload(thresholdMinutes));
-        return new SquattingThresholdUpdateResponse("squatting threshold updated", thresholdMinutes);
+        try {
+            deviceEventGateway.publishCommand("admin/config/squatting_time", squattingThresholdPayload(thresholdMinutes));
+            return new SquattingThresholdUpdateResponse("squatting threshold updated", thresholdMinutes);
+        } catch (RuntimeException exception) {
+            log.error("Failed to publish squatting threshold update", exception);
+            return new SquattingThresholdUpdateResponse("사석화 기준 저장은 완료됐지만 라즈베리파이 전송에 실패했습니다.", thresholdMinutes);
+        }
     }
 
     @Transactional(readOnly = true)

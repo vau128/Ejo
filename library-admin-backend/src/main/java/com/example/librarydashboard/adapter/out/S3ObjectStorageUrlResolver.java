@@ -4,19 +4,33 @@ import com.example.librarydashboard.config.AwsStorageProperties;
 import com.example.librarydashboard.port.out.ObjectStorageUrlResolver;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.net.URLEncoder;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 @Component
 @ConditionalOnProperty(prefix = "app.aws", name = "enabled", havingValue = "true")
 public class S3ObjectStorageUrlResolver implements ObjectStorageUrlResolver {
 
     private final AwsStorageProperties properties;
+    private final S3Presigner presigner;
 
     public S3ObjectStorageUrlResolver(AwsStorageProperties properties) {
         this.properties = properties;
+        this.presigner = S3Presigner.builder()
+                .region(Region.of(properties.region()))
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(properties.accessKey(), properties.secretKey())
+                ))
+                .build();
     }
 
     @Override
@@ -28,7 +42,7 @@ public class S3ObjectStorageUrlResolver implements ObjectStorageUrlResolver {
             return storedValue;
         }
 
-        return buildPublicObjectUrl(storedValue);
+        return buildPresignedObjectUrl(storedValue);
     }
 
     private boolean looksLikeAbsoluteUrl(String value) {
@@ -40,16 +54,20 @@ public class S3ObjectStorageUrlResolver implements ObjectStorageUrlResolver {
         }
     }
 
-    private String buildPublicObjectUrl(String objectKey) {
+    private String buildPresignedObjectUrl(String objectKey) {
         String normalizedKey = objectKey.startsWith("/") ? objectKey.substring(1) : objectKey;
-        String encodedKey = encodePath(normalizedKey);
-        return "https://%s.s3.%s.amazonaws.com/%s".formatted(
-                properties.s3Bucket(),
-                properties.region(),
-                encodedKey
-        );
+        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                .bucket(properties.s3Bucket())
+                .key(normalizedKey)
+                .build();
+        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                .signatureDuration(Duration.ofHours(1))
+                .getObjectRequest(getObjectRequest)
+                .build();
+        return presigner.presignGetObject(presignRequest).url().toString();
     }
 
+    @SuppressWarnings("unused")
     private String encodePath(String path) {
         String[] segments = path.split("/");
         StringBuilder builder = new StringBuilder();
