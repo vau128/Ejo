@@ -89,10 +89,17 @@ def check_lost_items():
         # 3-1. 객체 추출 및 좌표, 종류 임시 저장
         detected_items_with_seats = []
         
+        # 찾고자 하는 타겟 분실물 10가지 클래스 (비교를 위해 소문자로 통일)
+        TARGET_CLASSES = ["backpack", "book", "card", "glasses", "laptop", "mouse", "phone", "tumbler", "bottle", "charger"]
+        
         for box in results[0].boxes:
             # 카테고리 이름 추출
             class_id = int(box.cls[0])
             category = results[0].names[class_id]
+            
+            # 탐지된 물건이 타겟 리스트에 없으면 크롭/저장 안 하고 건너뛰기!
+            if category.lower() not in TARGET_CLASSES:
+                continue
             
             # 바운딩 박스 좌표 추출 (크롭을 위해 정수형 변환)
             x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
@@ -125,9 +132,9 @@ def check_lost_items():
                 
         print(f"[YOLO] Unique Mapped Items: {[f'Seat {i['seat_num']}: {i['category']}' for i in unique_items]}")
 
-        # 탐지된 물건이 없으면 여기서 바로 종료 (불필요한 동작 방지)
+        # 탐지된 타겟 물건이 없으면 여기서 바로 종료
         if not unique_items:
-            print("[YOLO] ✨ No items detected. Skipping S3 upload and API call.")
+            print("[YOLO] ✨ No target items detected. Skipping S3 upload and API call.")
             return 
 
         # 4. 개별 이미지 크롭, S3 업로드 및 API 전송
