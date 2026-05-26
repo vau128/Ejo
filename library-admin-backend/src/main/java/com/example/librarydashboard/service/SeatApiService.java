@@ -279,10 +279,7 @@ public class SeatApiService {
         Map<String, Object> settings = dashboardOperationsStore.getSettings();
         settings.put("squattingThresholdMinutes", thresholdMinutes);
         dashboardOperationsStore.saveSettings(settings);
-        deviceEventGateway.publishCommand("admin/config/squatting_time", Map.of(
-                "limit_minutes", thresholdMinutes,
-                "triggeredAt", LocalDateTime.now().toString()
-        ));
+        deviceEventGateway.publishCommand("admin/config/squatting_time", squattingThresholdPayload(thresholdMinutes));
         return new SquattingThresholdUpdateResponse("squatting threshold updated", thresholdMinutes);
     }
 
@@ -495,6 +492,17 @@ public class SeatApiService {
             return DEFAULT_SQUATTING_THRESHOLD_MINUTES;
         }
         return thresholdMinutes;
+    }
+
+    private Map<String, Object> squattingThresholdPayload(int thresholdMinutes) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("triggeredAt", LocalDateTime.now().toString());
+        if (thresholdMinutes == 10) {
+            payload.put("limit_seconds", 10);
+        } else {
+            payload.put("limit_minutes", thresholdMinutes);
+        }
+        return payload;
     }
 
     private String seatCode(int seatNum) {

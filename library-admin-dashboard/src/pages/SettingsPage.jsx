@@ -22,7 +22,7 @@ const defaultSettings = {
 };
 
 const thresholdOptions = [
-  { value: 10, label: '10분 (테스트)' },
+  { value: 10, label: '10초 (테스트)' },
   { value: 30, label: '30분' },
   { value: 60, label: '1시간' },
   { value: 120, label: '2시간' },

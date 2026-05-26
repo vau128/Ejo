@@ -333,14 +333,15 @@ def on_message(client, userdata, msg):
     # [동적 타이머 설정] 관리자가 사석화 기준 시간을 변경했을 때
     elif topic == "admin/config/squatting_time":
         try:
-            # 관리자가 앱에서 보낸 JSON (예: {"limit_minutes": 60})
+            # 관리자가 앱에서 보낸 JSON (예: {"limit_minutes": 60} 또는 {"limit_seconds": 10})
             config_data = json.loads(payload_str)
-            new_minutes = config_data.get("limit_minutes", 45) # 기본값은 45분
-            
-            # 분(Minutes)을 초(Seconds)로 변환하여 글로벌 변수 업데이트
-            SQUATTING_LIMIT = new_minutes * 60 
-            
-            print(f"[CONFIG] 🛠️ Admin updated squatting limit to {new_minutes} minutes ({SQUATTING_LIMIT} seconds)!")
+            if "limit_seconds" in config_data:
+                SQUATTING_LIMIT = int(config_data["limit_seconds"])
+                print(f"[CONFIG] 🛠️ Admin updated squatting limit to {SQUATTING_LIMIT} seconds (test mode)!")
+            else:
+                new_minutes = config_data.get("limit_minutes", 45) # 기본값은 45분
+                SQUATTING_LIMIT = new_minutes * 60
+                print(f"[CONFIG] 🛠️ Admin updated squatting limit to {new_minutes} minutes ({SQUATTING_LIMIT} seconds)!")
         except Exception as e:
             print(f"[ERROR] Failed to update squatting time: {e}")
 
