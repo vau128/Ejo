@@ -93,7 +93,7 @@ class SeatSelectionScreen extends StatelessWidget {
   }
 
   Future<void> _handleSeatTap(BuildContext context, Seat seat) async {
-    final message = await appState.toggleSeatSelection(seat.id);
+    final message = await appState.toggleSeatSelection(seat.number.toString());
     if (!context.mounted || message == null) {
       return;
     }

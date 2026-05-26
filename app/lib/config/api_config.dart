@@ -1,7 +1,7 @@
 class ApiConfig {
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8080/api/app',
+    defaultValue: 'http://13.209.33.104:8080/api/app',
   );
 
   static String get apiRootUrl {

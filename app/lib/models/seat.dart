@@ -1,4 +1,11 @@
-enum SeatStatus { available, occupied, squatting, abnormal }
+enum SeatStatus {
+  available,
+  reserved,
+  occupied,
+  objectOnly,
+  vacantLong,
+  sensorDelay,
+}
 
 class Seat {
   const Seat({
@@ -66,12 +73,18 @@ class Seat {
     switch (status) {
       case 'AVAILABLE':
         return SeatStatus.available;
+      case 'RESERVED':
+        return SeatStatus.reserved;
       case 'OCCUPIED':
         return SeatStatus.occupied;
+      case 'OBJECT_ONLY':
+        return SeatStatus.objectOnly;
+      case 'VACANT_LONG':
       case 'SQUATTING':
-        return SeatStatus.squatting;
       case 'ABNORMAL':
-        return SeatStatus.abnormal;
+        return SeatStatus.vacantLong;
+      case 'SENSOR_DELAY':
+        return SeatStatus.sensorDelay;
       default:
         return SeatStatus.available;
     }
