@@ -4,12 +4,14 @@ import com.example.librarydashboard.dto.AppSettingsRequest;
 import com.example.librarydashboard.dto.StudentLoginRequest;
 import com.example.librarydashboard.dto.StudentSignupRequest;
 import com.example.librarydashboard.dto.seat.AlertResponse;
+import com.example.librarydashboard.entity.LostItem;
 import com.example.librarydashboard.entity.Seat;
 import com.example.librarydashboard.port.out.DeviceEventGateway;
-import com.example.librarydashboard.port.out.LostItemStore;
+import com.example.librarydashboard.port.out.ObjectStorageUrlResolver;
 import com.example.librarydashboard.port.out.SeatStore;
 import com.example.librarydashboard.port.out.StudentAccountStore;
 import com.example.librarydashboard.port.out.UserSettingsStore;
+import com.example.librarydashboard.repository.LostItemRepository;
 import com.example.librarydashboard.repository.SeatRepository;
 import com.example.librarydashboard.repository.WarningRepository;
 import org.springframework.http.HttpStatus;
@@ -30,9 +32,10 @@ public class AppService {
 
     private final StudentAccountStore studentAccountStore;
     private final SeatStore seatStore;
-    private final LostItemStore lostItemStore;
     private final UserSettingsStore userSettingsStore;
     private final DeviceEventGateway deviceEventGateway;
+    private final ObjectStorageUrlResolver objectStorageUrlResolver;
+    private final LostItemRepository lostItemRepository;
     private final SeatRepository seatRepository;
     private final SeatApiService seatApiService;
     private final WarningRepository warningRepository;
@@ -40,18 +43,20 @@ public class AppService {
     public AppService(
             StudentAccountStore studentAccountStore,
             SeatStore seatStore,
-            LostItemStore lostItemStore,
             UserSettingsStore userSettingsStore,
             DeviceEventGateway deviceEventGateway,
+            ObjectStorageUrlResolver objectStorageUrlResolver,
+            LostItemRepository lostItemRepository,
             SeatRepository seatRepository,
             SeatApiService seatApiService,
             WarningRepository warningRepository
     ) {
         this.studentAccountStore = studentAccountStore;
         this.seatStore = seatStore;
-        this.lostItemStore = lostItemStore;
         this.userSettingsStore = userSettingsStore;
         this.deviceEventGateway = deviceEventGateway;
+        this.objectStorageUrlResolver = objectStorageUrlResolver;
+        this.lostItemRepository = lostItemRepository;
         this.seatRepository = seatRepository;
         this.seatApiService = seatApiService;
         this.warningRepository = warningRepository;
@@ -242,7 +247,11 @@ public class AppService {
 
     public Map<String, Object> getLostItems(String token) {
         requireUser(token);
-        return mapOf("reports", lostItemStore.findAll());
+        return mapOf(
+                "reports", lostItemRepository.findAllByOrderByDetectedTimeDesc().stream()
+                        .map(this::lostItemReport)
+                        .toList()
+        );
     }
 
     public Map<String, Object> getSettings(String token) {
@@ -285,6 +294,16 @@ public class AppService {
                 "email", user.get("email"),
                 "warningCount", user.get("warningCount"),
                 "agreedToPrivacy", user.get("agreedToPrivacy")
+        );
+    }
+
+    private Map<String, Object> lostItemReport(LostItem item) {
+        return mapOf(
+                "reportId", String.valueOf(item.getId()),
+                "seatNumber", item.getSeatNum(),
+                "detectedAt", item.getDetectedTime().toString(),
+                "imageAssetPath", objectStorageUrlResolver.resolveReadUrl(item.getImageUrl()),
+                "classificationStatus", item.getCategory() == null || item.getCategory().isBlank() ? item.getStatus() : item.getCategory()
         );
     }
 

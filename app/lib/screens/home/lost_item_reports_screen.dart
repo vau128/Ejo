@@ -34,6 +34,19 @@ class _ReportCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final imageWidget = report.imageUrl.startsWith('http://') ||
+            report.imageUrl.startsWith('https://')
+        ? Image.network(
+            report.imageUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (_, error, stackTrace) => _imageFallback(context),
+          )
+        : Image.asset(
+            report.imageUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (_, error, stackTrace) => _imageFallback(context),
+          );
+
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -41,20 +54,7 @@ class _ReportCard extends StatelessWidget {
         children: [
           AspectRatio(
             aspectRatio: 16 / 9,
-            child: Image.asset(
-              report.imageUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (_, error, stackTrace) {
-                return Container(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  alignment: Alignment.center,
-                  child: const Icon(
-                    Icons.image_not_supported_outlined,
-                    size: 40,
-                  ),
-                );
-              },
-            ),
+            child: imageWidget,
           ),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -83,5 +83,16 @@ class _ReportCard extends StatelessWidget {
     final hour = dateTime.hour.toString().padLeft(2, '0');
     final minute = dateTime.minute.toString().padLeft(2, '0');
     return '$month/$day $hour:$minute';
+  }
+
+  Widget _imageFallback(BuildContext context) {
+    return Container(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      alignment: Alignment.center,
+      child: const Icon(
+        Icons.image_not_supported_outlined,
+        size: 40,
+      ),
+    );
   }
 }

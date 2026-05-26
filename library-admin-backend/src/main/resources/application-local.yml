@@ -34,7 +34,7 @@ app:
     heartbeat-threshold-seconds: 30
     mqtt:
       enabled: false
-      broker-url: ${MQTT_BROKER_URL:tcp://localhost:1883}
+      broker-url: ${MQTT_BROKER_URL:tcp://0.tcp.jp.ngrok.io:28899}
       client-id-prefix: ${MQTT_CLIENT_ID_PREFIX:library-admin-backend-local}
       username: ${MQTT_USERNAME:}
       password: ${MQTT_PASSWORD:}
