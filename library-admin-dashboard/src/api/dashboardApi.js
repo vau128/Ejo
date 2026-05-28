@@ -135,3 +135,8 @@ export async function triggerLostItemScan() {
   const { data } = await client.post('/admin/lost-item-scan', requestBody);
   return data;
 }
+
+export async function resetAllSeats() {
+  const { data } = await client.post('/testing/reset-demo-state');
+  return data;
+}
