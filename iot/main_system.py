@@ -57,10 +57,26 @@ shutdown_started = False
 # ⚠️ 현재 테스트를 위해 10초로 변경 (관리자가 변경하면 이 값이 업데이트 됨)
 SQUATTING_LIMIT = 10  
 
+
+def fetch_checkin_status(seat_num):
+    try:
+        response = requests.get(f"{FASTAPI_CHECKIN_STATUS_URL}/{seat_num}", timeout=2)
+        if response.status_code == 200:
+            return response.json().get("is_checked_in", False)
+        print(f"[API] Check-in status request failed for Seat {seat_num}. HTTP Code: {response.status_code}")
+    except requests.exceptions.RequestException as exc:
+        print(f"[API] Check-in status request failed for Seat {seat_num}: {exc}")
+    return False
+  
 # ----------------------------------------------------
 # [2. 사석화 판정 로직]
 # ----------------------------------------------------
 def trigger_squatting(seat_num):
+    if not fetch_checkin_status(seat_num):
+        print(f"[INFO] Seat {seat_num} is no longer checked in. Skipping squatting mark.")
+        squatting_timers.pop(seat_num, None)
+        return
+
     print(f"[WARNING] Seat {seat_num} empty for timer limit! Marked as squatting.")
     try:
         payload = {"seat_num": seat_num, "status": "squatting"}
@@ -327,15 +343,7 @@ def on_message(client, userdata, msg):
                 send_empty_status(seat_num)
                 
                 # 백엔드에 현재 발권(체크인) 상태인지 물어보는 검증 로직
-                is_checked_in = True # 기본값 (API 통신 실패 시 테스트를 위해 True로 둠)
-                try:
-                    url = f"{FASTAPI_CHECKIN_STATUS_URL}/{seat_num}"
-                    # timeout=2: 서버가 꺼져있을 때 2초만 기다리고 바로 다음 코드로 넘어가게 함
-                    response = requests.get(url, timeout=2)
-                    if response.status_code == 200:
-                        is_checked_in = response.json().get("is_checked_in", True)
-                except requests.exceptions.RequestException:
-                    print(f"[API] (Mock API) Server unreachable. Assuming Seat {seat_num} is checked in.")
+                is_checked_in = fetch_checkin_status(seat_num)
                 
                 # 체크인 상태일 때만 사석화 타이머 가동
                 if is_checked_in:

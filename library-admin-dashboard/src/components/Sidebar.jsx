@@ -6,6 +6,7 @@ const menu = [
   { to: '/alert-history', label: '알림 전송 이력', icon: '⎘' },
   { to: '/alert-management', label: '알림 관리', icon: '⚙' },
   { to: '/statistics', label: '통계', icon: '◔' },
+  { to: '/healthcare-statistics', label: '헬스 케어 통계', icon: '♥' },
   { to: '/zone-seats', label: '좌석 현황', icon: '▦' },
   { to: '/abnormal-seats', label: '비정상 좌석', icon: '!' },
   { to: '/lost-items', label: '분실물 관리보드', icon: '◈' },

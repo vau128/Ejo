@@ -14,16 +14,10 @@ public class InMemoryStudentAccountStore implements StudentAccountStore {
     private final Map<String, String> userIdByToken = new LinkedHashMap<>();
 
     public InMemoryStudentAccountStore() {
-        Map<String, Object> student = new LinkedHashMap<>();
-        student.put("id", "student-001");
-        student.put("name", "김도서");
-        student.put("studentId", "20240001");
-        student.put("email", "student@library.com");
-        student.put("password", "password123");
-        student.put("warningCount", 0);
-        student.put("agreedToPrivacy", true);
-        student.put("selectedSeatId", null);
-        studentsByEmail.put("student@library.com", student);
+        seedStudent("student-001", "김도서", "20240001", "student1@library.com", "password123");
+        seedStudent("student-002", "이열람", "20240002", "student2@library.com", "password123");
+        seedStudent("student-003", "박자료", "20240003", "student3@library.com", "password123");
+        seedStudent("student-004", "최좌석", "20240004", "student4@library.com", "password123");
     }
 
     @Override
@@ -75,5 +69,18 @@ public class InMemoryStudentAccountStore implements StudentAccountStore {
             student.put("warningCount", 0);
             student.put("selectedSeatId", null);
         }
+    }
+
+    private void seedStudent(String id, String name, String studentId, String email, String password) {
+        Map<String, Object> student = new LinkedHashMap<>();
+        student.put("id", id);
+        student.put("name", name);
+        student.put("studentId", studentId);
+        student.put("email", email);
+        student.put("password", password);
+        student.put("warningCount", 0);
+        student.put("agreedToPrivacy", true);
+        student.put("selectedSeatId", null);
+        studentsByEmail.put(email, student);
     }
 }

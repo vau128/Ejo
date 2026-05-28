@@ -25,7 +25,7 @@ export default function StatisticsPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <MetricCard label="정상 자세 비율" value={`${normalRatio}%`} helper="현재 좌석 기준" accent="emerald" />
         <MetricCard label="비정상 자세 횟수" value={abnormalCount} helper="현재 감지 좌석 수" accent="rose" />
-        <MetricCard label="사석화 좌석" value={seats.filter((seat) => seat.status === 'SQUATTING' || seat.status === 'ABNORMAL').length} helper="관리자 확인 필요" accent="amber" />
+        <MetricCard label="사석화 좌석" value={seats.filter((seat) => seat.status === 'VACANT_LONG' || seat.status === 'OBJECT_ONLY' || seat.status === 'SENSOR_DELAY').length} helper="관리자 확인 필요" accent="amber" />
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">

@@ -335,6 +335,13 @@ public class AppService {
         };
     }
 
+    public String maskStudentId(String studentId) {
+        if (studentId == null || studentId.length() < 4) {
+            return "익명";
+        }
+        return studentId.substring(0, 4) + "****";
+    }
+
     private Map<String, Object> defaultSettings() {
         return new LinkedHashMap<>(mapOf(
                 "pushEnabled", true,

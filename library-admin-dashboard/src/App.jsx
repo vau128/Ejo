@@ -10,6 +10,7 @@ import AlertHistoryPage from './pages/AlertHistoryPage';
 import AlertManagementPage from './pages/AlertManagementPage';
 import SettingsPage from './pages/SettingsPage';
 import StatisticsPage from './pages/StatisticsPage';
+import HealthcareStatisticsPage from './pages/HealthcareStatisticsPage';
 import ZoneSeatsPage from './pages/ZoneSeatsPage';
 import AbnormalSeatsPage from './pages/AbnormalSeatsPage';
 import LostItemsPage from './pages/LostItemsPage';
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="/alert-management" element={<AlertManagementPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/statistics" element={<StatisticsPage />} />
+          <Route path="/healthcare-statistics" element={<HealthcareStatisticsPage />} />
           <Route path="/zone-seats" element={<ZoneSeatsPage />} />
           <Route path="/abnormal-seats" element={<AbnormalSeatsPage />} />
           <Route path="/lost-items" element={<LostItemsPage />} />

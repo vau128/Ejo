@@ -2,6 +2,7 @@ package com.example.librarydashboard.service;
 
 import com.example.librarydashboard.dto.IotSeatStatusRequest;
 import com.example.librarydashboard.dto.SettingsUpdateRequest;
+import com.example.librarydashboard.entity.PostureLog;
 import com.example.librarydashboard.entity.Seat;
 import com.example.librarydashboard.entity.Warning;
 import com.example.librarydashboard.port.out.DashboardOperationsStore;
@@ -9,6 +10,7 @@ import com.example.librarydashboard.port.out.DeviceEventGateway;
 import com.example.librarydashboard.port.out.NotificationGateway;
 import com.example.librarydashboard.port.out.ObjectStorageUrlResolver;
 import com.example.librarydashboard.port.out.StudentAccountStore;
+import com.example.librarydashboard.repository.PostureLogRepository;
 import com.example.librarydashboard.repository.WarningRepository;
 import com.example.librarydashboard.repository.SeatRepository;
 import org.springframework.http.HttpStatus;
@@ -18,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,8 +39,10 @@ public class DashboardService {
     private final NotificationGateway notificationGateway;
     private final ObjectStorageUrlResolver objectStorageUrlResolver;
     private final SeatRepository seatRepository;
+    private final PostureLogRepository postureLogRepository;
     private final WarningRepository warningRepository;
     private final StudentAccountStore studentAccountStore;
+    private final AppService appService;
 
     public DashboardService(
             DashboardOperationsStore dashboardOperationsStore,
@@ -45,16 +50,20 @@ public class DashboardService {
             NotificationGateway notificationGateway,
             ObjectStorageUrlResolver objectStorageUrlResolver,
             SeatRepository seatRepository,
+            PostureLogRepository postureLogRepository,
             WarningRepository warningRepository,
-            StudentAccountStore studentAccountStore
+            StudentAccountStore studentAccountStore,
+            AppService appService
     ) {
         this.dashboardOperationsStore = dashboardOperationsStore;
         this.deviceEventGateway = deviceEventGateway;
         this.notificationGateway = notificationGateway;
         this.objectStorageUrlResolver = objectStorageUrlResolver;
         this.seatRepository = seatRepository;
+        this.postureLogRepository = postureLogRepository;
         this.warningRepository = warningRepository;
         this.studentAccountStore = studentAccountStore;
+        this.appService = appService;
     }
 
     public Map<String, Object> getOverview() {
@@ -91,15 +100,18 @@ public class DashboardService {
     public Map<String, Object> getActions() {
         List<Map<String, Object>> seats = loadDashboardSeats();
         List<Map<String, Object>> actionQueue = buildActionQueue(seats);
+        List<Map<String, Object>> activeCheckIns = buildActiveCheckInRows(seats);
 
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("pendingWarnings", actionQueue.size());
         summary.put("pendingReleases", actionQueue.stream().filter(item -> !"처리 완료".equals(item.get("status"))).count());
         summary.put("resolvedToday", 0);
+        summary.put("activeCheckIns", activeCheckIns.size());
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("summary", summary);
         response.put("queue", actionQueue);
+        response.put("activeCheckIns", activeCheckIns);
         return response;
     }
 
@@ -129,16 +141,21 @@ public class DashboardService {
 
     public Map<String, Object> releaseSeat(String seatId) {
         Seat seat = findSeatEntity(seatId);
-        seat.setCheckedIn(false);
-        seat.setOccupied(false);
-        seat.setStatus("AVAILABLE");
-        seat.setVacantSince(null);
-        seat.setUpdatedAt(LocalDateTime.now());
-        seatRepository.save(seat);
+        clearSeatAssignment(seat, "관리자가 좌석 상태를 사용 가능으로 복구했습니다.");
         addHistory(seatId, "상태 해제", "관리자 처리", "전송 완료", "관리자가 좌석 상태를 사용 가능으로 복구했습니다.");
         addSensorLog("SEAT_RELEASE", seatId, "edge-rpi-02", "release", "관리자 상태 해제 처리", "정상");
-        deviceEventGateway.publishSeatStatusChanged(seatId, "AVAILABLE", mapSeatForDashboard(seat));
+        deviceEventGateway.publishSeatStatusChanged(seatId, seat.getStatus(), mapSeatForDashboard(seat));
         return message("좌석 상태를 해제했습니다.");
+    }
+
+    public Map<String, Object> forceCheckout(String seatId) {
+        Seat seat = findSeatEntity(seatId);
+        Map<String, Object> releasedStudent = clearSeatAssignment(seat, "관리자가 테스트용으로 학생을 강제 퇴실 처리했습니다.");
+        String studentName = releasedStudent == null ? "미연결 사용자" : String.valueOf(releasedStudent.get("name"));
+        addHistory(seatId, "강제 퇴실", "관리자 처리", "전송 완료", studentName + " 학생을 강제 퇴실 처리했습니다.");
+        addSensorLog("FORCED_CHECKOUT", seatId, "dashboard-web", studentName, "관리자 강제 퇴실 처리", "정상");
+        deviceEventGateway.publishSeatStatusChanged(seatId, seat.getStatus(), mapSeatForDashboard(seat));
+        return message("학생 강제 퇴실 처리를 완료했습니다.");
     }
 
     public Map<String, Object> resolveIssue(String seatId) {
@@ -212,6 +229,54 @@ public class DashboardService {
                 mapOf("label", "센서 지연", "value", 0, "rate", 0)
         ));
         return response;
+    }
+
+    public Map<String, Object> getHealthcareStatistics() {
+        List<Map<String, Object>> seats = loadDashboardSeats();
+        List<PostureLog> recentLogs = postureLogRepository.findTop40ByOrderByCreatedAtDesc();
+        List<PostureLog> orderedLogs = recentLogs.stream()
+                .sorted(Comparator.comparing(PostureLog::getCreatedAt))
+                .toList();
+
+        long abnormalLogCount = recentLogs.stream()
+                .filter(log -> !isNormalPosture(log.getPosture()))
+                .count();
+        int sampleCount = recentLogs.size();
+        int abnormalRate = sampleCount == 0 ? 0 : (int) Math.round((abnormalLogCount * 100.0d) / sampleCount);
+
+        Map<String, Object> summary = mapOf(
+                "activeSeatCount", seats.stream().filter(seat -> Objects.equals(seat.get("status"), "OCCUPIED")).count(),
+                "postureSampleCount", sampleCount,
+                "abnormalPostureRate", abnormalRate,
+                "vacantRiskSeats", seats.stream().filter(seat -> Objects.equals(seat.get("status"), "VACANT_LONG")).count()
+        );
+
+        List<Map<String, Object>> postureBreakdown = List.of(
+                mapOf("label", "정상", "value", recentLogs.stream().filter(log -> isNormalPosture(log.getPosture())).count()),
+                mapOf("label", "거북목/허리 숙임", "value", recentLogs.stream().filter(log -> isPosture(log, "거북목", "허리 숙임")).count()),
+                mapOf("label", "왼쪽 기울어짐", "value", recentLogs.stream().filter(log -> isPosture(log, "왼쪽")).count()),
+                mapOf("label", "오른쪽 기울어짐", "value", recentLogs.stream().filter(log -> isPosture(log, "오른쪽")).count())
+        );
+
+        List<Map<String, Object>> pressureTrend = buildPressureTrend(orderedLogs);
+        List<Map<String, Object>> liveSeatHealth = seats.stream()
+                .map(seat -> mapOf(
+                        "seatId", seat.get("seatId"),
+                        "seatNumber", seat.get("seatNumber"),
+                        "posture", seat.get("posture"),
+                        "statusLabel", seat.get("statusLabel"),
+                        "checkedIn", seat.get("checkedIn"),
+                        "pressureTotal", Math.round(toDouble(seat.get("pressureValue"))),
+                        "sensorHint", seat.get("sensorHint")
+                ))
+                .toList();
+
+        return mapOf(
+                "summary", summary,
+                "postureBreakdown", postureBreakdown,
+                "pressureTrend", pressureTrend,
+                "liveSeatHealth", liveSeatHealth
+        );
     }
 
     public Map<String, Object> getSettings() {
@@ -424,6 +489,24 @@ public class DashboardService {
                 .toList();
     }
 
+    private List<Map<String, Object>> buildActiveCheckInRows(List<Map<String, Object>> seats) {
+        return seats.stream()
+                .filter(seat -> Boolean.TRUE.equals(seat.get("checkedIn")))
+                .map(seat -> {
+                    String seatId = String.valueOf(seat.get("seatId"));
+                    Map<String, Object> student = studentAccountStore.findBySelectedSeatId(seatId).orElse(null);
+                    return mapOf(
+                            "seatId", seatId,
+                            "studentName", student == null ? "미배정" : student.get("name"),
+                            "studentIdMasked", student == null ? "-" : appService.maskStudentId(String.valueOf(student.get("studentId"))),
+                            "statusLabel", seat.get("statusLabel"),
+                            "posture", seat.get("posture"),
+                            "lastUpdated", seat.get("lastUpdated")
+                    );
+                })
+                .toList();
+    }
+
     private List<Map<String, Object>> buildAbnormalSeatRows(List<Map<String, Object>> seats) {
         return seats.stream()
                 .filter(seat -> Boolean.TRUE.equals(seat.get("abnormal")))
@@ -444,6 +527,26 @@ public class DashboardService {
 
     private long countAbnormalSeats(List<Map<String, Object>> seats) {
         return seats.stream().filter(seat -> Boolean.TRUE.equals(seat.get("abnormal"))).count();
+    }
+
+    private Map<String, Object> clearSeatAssignment(Seat seat, String releaseMessage) {
+        String seatId = seatCode(seat);
+        Map<String, Object> student = studentAccountStore.findBySelectedSeatId(seatId).orElse(null);
+        if (student != null) {
+            student.put("selectedSeatId", null);
+            studentAccountStore.save(student);
+        }
+
+        seat.setCheckedIn(false);
+        seat.setVacantSince(null);
+        seat.setStatus(seat.isOccupied() ? "OCCUPIED" : "AVAILABLE");
+        seat.setUpdatedAt(LocalDateTime.now());
+        seatRepository.save(seat);
+
+        if (student != null) {
+            addSensorLog("APP_CHECKOUT", seatId, "dashboard-web", String.valueOf(student.get("id")), releaseMessage, "정상");
+        }
+        return student;
     }
 
     private long countEnabledAutomations(Map<String, Object> settings) {
@@ -470,6 +573,51 @@ public class DashboardService {
             case "RESERVED" -> "안내";
             default -> "확인";
         };
+    }
+
+    private List<Map<String, Object>> buildPressureTrend(List<PostureLog> orderedLogs) {
+        if (orderedLogs.isEmpty()) {
+            return List.of(
+                    point("표본 1", 0),
+                    point("표본 2", 0),
+                    point("표본 3", 0),
+                    point("표본 4", 0),
+                    point("표본 5", 0),
+                    point("표본 6", 0)
+            );
+        }
+
+        List<PostureLog> recent = orderedLogs.stream()
+                .skip(Math.max(0, orderedLogs.size() - 8))
+                .toList();
+        List<Map<String, Object>> trend = new ArrayList<>();
+        for (int index = 0; index < recent.size(); index++) {
+            PostureLog log = recent.get(index);
+            int pressureTotal = valueOrZero(log.getLeftPressure()) + valueOrZero(log.getRightPressure()) + valueOrZero(log.getBackPressure());
+            trend.add(point("표본 " + (index + 1), pressureTotal));
+        }
+        return trend;
+    }
+
+    private boolean isNormalPosture(String posture) {
+        return posture == null || posture.isBlank() || "정상".equals(posture) || "바른 자세 유지 중".equals(posture);
+    }
+
+    private boolean isPosture(PostureLog log, String... keywords) {
+        String posture = log.getPosture();
+        if (posture == null) {
+            return false;
+        }
+        for (String keyword : keywords) {
+            if (posture.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private double toDouble(Object value) {
+        return value instanceof Number number ? number.doubleValue() : 0.0d;
     }
 
     private Map<String, Object> createSeatShell(String seatId) {
@@ -523,6 +671,7 @@ public class DashboardService {
     }
 
     private Seat findSeatEntity(String seatId) {
+        bootstrapSeatsIfEmpty();
         int seatNum = parseSeatNum(seatId);
         return seatRepository.findBySeatNum(seatNum)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "좌석을 찾을 수 없습니다."));
@@ -576,11 +725,38 @@ public class DashboardService {
     }
 
     private List<Map<String, Object>> loadDashboardSeats() {
+        bootstrapSeatsIfEmpty();
         return seatRepository.findAll().stream()
                 .filter(seat -> seat.getSeatNum() != null && seat.getSeatNum() >= 1 && seat.getSeatNum() <= 4)
                 .sorted(Comparator.comparing(Seat::getSeatNum))
                 .map(this::mapSeatForDashboard)
                 .toList();
+    }
+
+    private void bootstrapSeatsIfEmpty() {
+        if (seatRepository.count() > 0) {
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        for (int seatNum = 1; seatNum <= 4; seatNum++) {
+            seatRepository.save(new Seat(
+                    seatNum,
+                    "A-" + seatNum,
+                    "seat-" + seatNum,
+                    0,
+                    "AVAILABLE",
+                    false,
+                    false,
+                    "정상",
+                    0,
+                    0,
+                    0,
+                    now,
+                    null,
+                    now
+            ));
+        }
     }
 
     private Map<String, Object> mapSeatForDashboard(Seat seat) {

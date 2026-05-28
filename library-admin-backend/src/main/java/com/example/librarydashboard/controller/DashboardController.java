@@ -47,6 +47,11 @@ public class DashboardController {
         return dashboardService.releaseSeat(request.seatId());
     }
 
+    @PostMapping("/actions/force-checkout")
+    public Map<String, Object> forceCheckout(@Valid @RequestBody SeatActionRequest request) {
+        return dashboardService.forceCheckout(request.seatId());
+    }
+
     @PostMapping("/actions/resolve")
     public Map<String, Object> resolveSeat(@Valid @RequestBody SeatActionRequest request) {
         return dashboardService.resolveIssue(request.seatId());
@@ -70,6 +75,11 @@ public class DashboardController {
     @GetMapping("/stats")
     public Map<String, Object> statistics() {
         return dashboardService.getStatistics();
+    }
+
+    @GetMapping("/healthcare/stats")
+    public Map<String, Object> healthcareStatistics() {
+        return dashboardService.getHealthcareStatistics();
     }
 
     @GetMapping("/settings")
