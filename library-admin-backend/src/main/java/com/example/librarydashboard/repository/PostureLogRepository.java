@@ -10,4 +10,10 @@ public interface PostureLogRepository extends JpaRepository<PostureLog, Long> {
     long countByPostureNot(String posture);
 
     List<PostureLog> findTop40ByOrderByCreatedAtDesc();
+
+    List<PostureLog> findAllBySeatNumAndCreatedAtBetweenOrderByCreatedAtAsc(
+            Integer seatNum,
+            java.time.LocalDateTime start,
+            java.time.LocalDateTime end
+    );
 }

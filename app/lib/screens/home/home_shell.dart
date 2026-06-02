@@ -42,7 +42,9 @@ class _HomeShellState extends State<HomeShell> {
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: Text('관리자 경고: ${warning.seatNumber}번 좌석 ${warning.message}'),
+            content: Text(
+              '관리자 경고: ${warning.seatNumber}번 좌석 ${warning.message}',
+            ),
             duration: const Duration(seconds: 4),
           ),
         );

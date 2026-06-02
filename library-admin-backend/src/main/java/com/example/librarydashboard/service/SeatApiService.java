@@ -25,6 +25,7 @@ import com.example.librarydashboard.port.out.StudentAccountStore;
 import com.example.librarydashboard.repository.LostItemRepository;
 import com.example.librarydashboard.repository.PostureLogRepository;
 import com.example.librarydashboard.repository.SeatRepository;
+import com.example.librarydashboard.repository.SeatUsageRepository;
 import com.example.librarydashboard.repository.SystemSettingRepository;
 import com.example.librarydashboard.repository.WarningRepository;
 import org.slf4j.Logger;
@@ -61,6 +62,7 @@ public class SeatApiService {
     private final ObjectStorageUrlResolver objectStorageUrlResolver;
     private final CheckInStatusService checkInStatusService;
     private final StudentAccountStore studentAccountStore;
+    private final SeatUsageRepository seatUsageRepository;
 
     public SeatApiService(
             SeatRepository seatRepository,
@@ -73,7 +75,8 @@ public class SeatApiService {
             IotAdminTriggerClient iotAdminTriggerClient,
             ObjectStorageUrlResolver objectStorageUrlResolver,
             CheckInStatusService checkInStatusService,
-            StudentAccountStore studentAccountStore
+            StudentAccountStore studentAccountStore,
+            SeatUsageRepository seatUsageRepository
     ) {
         this.seatRepository = seatRepository;
         this.warningRepository = warningRepository;
@@ -86,6 +89,7 @@ public class SeatApiService {
         this.objectStorageUrlResolver = objectStorageUrlResolver;
         this.checkInStatusService = checkInStatusService;
         this.studentAccountStore = studentAccountStore;
+        this.seatUsageRepository = seatUsageRepository;
     }
 
     public MessageResponse updateSeatStatus(SeatStatusUpdateRequest request) {
@@ -166,6 +170,7 @@ public class SeatApiService {
         warningRepository.deleteAllInBatch();
         lostItemRepository.deleteAllInBatch();
         postureLogRepository.deleteAllInBatch();
+        seatUsageRepository.deleteAllInBatch();
 
         LocalDateTime now = LocalDateTime.now();
         for (int seatNum = 1; seatNum <= 4; seatNum++) {

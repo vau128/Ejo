@@ -61,17 +61,17 @@ class _WarningsScreenState extends State<WarningsScreen> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _errorMessage != null
-                ? _ErrorState(message: _errorMessage!, onRetry: _loadWarnings)
-                : warnings.isEmpty
-                    ? const _EmptyState()
-                    : ListView.separated(
-                        itemCount: warnings.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          final warning = warnings[index];
-                          return _WarningCard(warning: warning);
-                        },
-                      ),
+            ? _ErrorState(message: _errorMessage!, onRetry: _loadWarnings)
+            : warnings.isEmpty
+            ? const _EmptyState()
+            : ListView.separated(
+                itemCount: warnings.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final warning = warnings[index];
+                  return _WarningCard(warning: warning);
+                },
+              ),
       ),
     );
   }

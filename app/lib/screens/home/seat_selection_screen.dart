@@ -87,9 +87,9 @@ class SeatSelectionScreen extends StatelessWidget {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message ?? '상태가 새로고침되었습니다.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message ?? '상태가 새로고침되었습니다.')));
   }
 
   Future<void> _handleSeatTap(BuildContext context, Seat seat) async {
@@ -98,6 +98,8 @@ class SeatSelectionScreen extends StatelessWidget {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }

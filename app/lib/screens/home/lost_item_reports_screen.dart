@@ -34,7 +34,8 @@ class _ReportCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final imageWidget = report.imageUrl.startsWith('http://') ||
+    final imageWidget =
+        report.imageUrl.startsWith('http://') ||
             report.imageUrl.startsWith('https://')
         ? Image.network(
             report.imageUrl,
@@ -52,10 +53,7 @@ class _ReportCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AspectRatio(
-            aspectRatio: 16 / 9,
-            child: imageWidget,
-          ),
+          AspectRatio(aspectRatio: 16 / 9, child: imageWidget),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -89,10 +87,7 @@ class _ReportCard extends StatelessWidget {
     return Container(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
       alignment: Alignment.center,
-      child: const Icon(
-        Icons.image_not_supported_outlined,
-        size: 40,
-      ),
+      child: const Icon(Icons.image_not_supported_outlined, size: 40),
     );
   }
 }

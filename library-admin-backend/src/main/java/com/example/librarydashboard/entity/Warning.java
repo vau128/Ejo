@@ -52,7 +52,12 @@ public class Warning {
     }
 
     public Warning(Seat seat, Integer seatNum, String warningType, String status, String message, LocalDateTime warningTime) {
+        this(seat, null, seatNum, warningType, status, message, warningTime);
+    }
+
+    public Warning(Seat seat, User user, Integer seatNum, String warningType, String status, String message, LocalDateTime warningTime) {
         this.seat = seat;
+        this.user = user;
         this.seatNum = seatNum;
         this.warningType = warningType;
         this.status = status;
@@ -80,6 +85,10 @@ public class Warning {
 
     public Integer getSeatNum() {
         return seatNum;
+    }
+
+    public User getUser() {
+        return user;
     }
 
     public String getWarningType() {

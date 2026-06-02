@@ -17,6 +17,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final _studentIdController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _agreedToPrivacy = false;
 
   @override
@@ -25,6 +26,7 @@ class _SignupScreenState extends State<SignupScreen> {
     _studentIdController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -82,18 +84,32 @@ class _SignupScreenState extends State<SignupScreen> {
                   controller: _studentIdController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: '학번'),
-                  validator: (value) => value == null || value.trim().isEmpty
-                      ? '학번을 입력해주세요.'
-                      : null,
+                  validator: (value) {
+                    final text = value?.trim() ?? '';
+                    if (text.isEmpty) {
+                      return '학번을 입력해주세요.';
+                    }
+                    if (text.length < 8) {
+                      return '학번은 8자 이상 입력해주세요.';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(labelText: '이메일'),
-                  validator: (value) => value == null || value.trim().isEmpty
-                      ? '이메일을 입력해주세요.'
-                      : null,
+                  validator: (value) {
+                    final text = value?.trim() ?? '';
+                    if (text.isEmpty) {
+                      return '이메일을 입력해주세요.';
+                    }
+                    if (!text.contains('@')) {
+                      return '올바른 이메일 형식을 입력해주세요.';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -107,6 +123,18 @@ class _SignupScreenState extends State<SignupScreen> {
                     return null;
                   },
                 ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: '비밀번호 확인'),
+                  validator: (value) {
+                    if (value != _passwordController.text) {
+                      return '비밀번호가 일치하지 않습니다.';
+                    }
+                    return null;
+                  },
+                ),
                 const SizedBox(height: 8),
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
@@ -115,10 +143,10 @@ class _SignupScreenState extends State<SignupScreen> {
                   onChanged: isBusy
                       ? null
                       : (value) {
-                    setState(() {
-                      _agreedToPrivacy = value ?? false;
-                    });
-                  },
+                          setState(() {
+                            _agreedToPrivacy = value ?? false;
+                          });
+                        },
                 ),
                 const SizedBox(height: 16),
                 FilledButton(

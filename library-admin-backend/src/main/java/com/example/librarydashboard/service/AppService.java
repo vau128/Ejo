@@ -5,19 +5,30 @@ import com.example.librarydashboard.dto.StudentLoginRequest;
 import com.example.librarydashboard.dto.StudentSignupRequest;
 import com.example.librarydashboard.dto.seat.AlertResponse;
 import com.example.librarydashboard.entity.LostItem;
+import com.example.librarydashboard.entity.PostureLog;
 import com.example.librarydashboard.entity.Seat;
+import com.example.librarydashboard.entity.SeatUsage;
+import com.example.librarydashboard.entity.User;
 import com.example.librarydashboard.port.out.DeviceEventGateway;
 import com.example.librarydashboard.port.out.ObjectStorageUrlResolver;
 import com.example.librarydashboard.port.out.SeatStore;
 import com.example.librarydashboard.port.out.StudentAccountStore;
 import com.example.librarydashboard.port.out.UserSettingsStore;
 import com.example.librarydashboard.repository.LostItemRepository;
+import com.example.librarydashboard.repository.PostureLogRepository;
 import com.example.librarydashboard.repository.SeatRepository;
+import com.example.librarydashboard.repository.SeatUsageRepository;
+import com.example.librarydashboard.repository.UserRepository;
 import com.example.librarydashboard.repository.WarningRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,10 +36,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.time.LocalDateTime;
 
 @Service
+@Transactional
 public class AppService {
+
+    private static final DateTimeFormatter DAY_LABEL_FORMATTER = DateTimeFormatter.ofPattern("M/d", Locale.KOREAN);
 
     private final StudentAccountStore studentAccountStore;
     private final SeatStore seatStore;
@@ -39,6 +52,9 @@ public class AppService {
     private final SeatRepository seatRepository;
     private final SeatApiService seatApiService;
     private final WarningRepository warningRepository;
+    private final UserRepository userRepository;
+    private final SeatUsageRepository seatUsageRepository;
+    private final PostureLogRepository postureLogRepository;
 
     public AppService(
             StudentAccountStore studentAccountStore,
@@ -49,7 +65,10 @@ public class AppService {
             LostItemRepository lostItemRepository,
             SeatRepository seatRepository,
             SeatApiService seatApiService,
-            WarningRepository warningRepository
+            WarningRepository warningRepository,
+            UserRepository userRepository,
+            SeatUsageRepository seatUsageRepository,
+            PostureLogRepository postureLogRepository
     ) {
         this.studentAccountStore = studentAccountStore;
         this.seatStore = seatStore;
@@ -60,6 +79,9 @@ public class AppService {
         this.seatRepository = seatRepository;
         this.seatApiService = seatApiService;
         this.warningRepository = warningRepository;
+        this.userRepository = userRepository;
+        this.seatUsageRepository = seatUsageRepository;
+        this.postureLogRepository = postureLogRepository;
     }
 
     public String resolveToken(String authorization, String studentToken) {
@@ -72,6 +94,7 @@ public class AppService {
         throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "학생 인증 토큰이 필요합니다.");
     }
 
+    @Transactional(readOnly = true)
     public Map<String, Object> login(StudentLoginRequest request) {
         Map<String, Object> user = studentAccountStore
                 .findByEmail(request.email().trim().toLowerCase(Locale.ROOT))
@@ -88,122 +111,102 @@ public class AppService {
         }
 
         String normalizedEmail = request.email().trim().toLowerCase(Locale.ROOT);
-        if (studentAccountStore.findByEmail(normalizedEmail).isPresent()) {
+        if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 등록된 이메일입니다.");
         }
+        if (userRepository.existsByStudentId(request.studentId().trim())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 등록된 학번입니다.");
+        }
 
-        Map<String, Object> user = new LinkedHashMap<>();
-        user.put("id", "student-local-" + System.currentTimeMillis());
-        user.put("name", request.name().trim());
-        user.put("studentId", request.studentId().trim());
-        user.put("email", normalizedEmail);
-        user.put("password", request.password());
-        user.put("warningCount", 0);
-        user.put("agreedToPrivacy", true);
-        user.put("selectedSeatId", null);
+        Map<String, Object> user = mapOf(
+                "name", request.name().trim(),
+                "studentId", request.studentId().trim(),
+                "email", normalizedEmail,
+                "password", request.password(),
+                "role", "USER",
+                "agreedToPrivacy", true,
+                "photo", null
+        );
 
         Map<String, Object> savedUser = studentAccountStore.save(user);
         userSettingsStore.save(String.valueOf(savedUser.get("id")), defaultSettings());
         return buildAuthResponse(savedUser);
     }
 
+    @Transactional(readOnly = true)
     public Map<String, Object> getCurrentUser(String token) {
         return mapOf("user", sanitizeUser(requireUser(token)));
     }
 
+    @Transactional(readOnly = true)
     public Map<String, Object> getSeats(String token) {
         Map<String, Object> user = requireUser(token);
-        String selectedSeatId = stringValue(user.get("selectedSeatId"));
+        String selectedSeatId = activeSeatIdForUser(toLong(user.get("id")));
         seatApiService.bootstrapSeatsIfEmpty();
-        List<Seat> seats = seatRepository.findAll().stream()
+        List<Map<String, Object>> seatItems = seatRepository.findAll().stream()
                 .filter(seat -> seat.getSeatNum() != null && seat.getSeatNum() >= 1 && seat.getSeatNum() <= 4)
-                .sorted((left, right) -> Integer.compare(left.getSeatNum(), right.getSeatNum()))
-                .toList();
-        List<Map<String, Object>> seatItems = seats.stream()
+                .sorted(Comparator.comparing(Seat::getSeatNum))
                 .map(seat -> seatResponse(seat, selectedSeatId))
                 .toList();
-
-        long availableCount = seats.stream().filter(seat -> Objects.equals(seat.getStatus(), "AVAILABLE")).count();
-        long reservedCount = seats.stream().filter(seat -> Objects.equals(seat.getStatus(), "RESERVED")).count();
-        long occupiedCount = seats.stream().filter(seat -> Objects.equals(seat.getStatus(), "OCCUPIED")).count();
-        long squattingCount = seats.stream().filter(seat ->
-                Objects.equals(seat.getStatus(), "VACANT_LONG")
-                        || Objects.equals(seat.getStatus(), "OBJECT_ONLY")
-                        || Objects.equals(seat.getStatus(), "SENSOR_DELAY")
-        ).count();
-
         return mapOf(
-                "summary", mapOf(
-                        "totalSeats", seats.size(),
-                        "availableSeats", availableCount,
-                        "reservedSeats", reservedCount,
-                        "occupiedSeats", occupiedCount,
-                        "squattingSeats", squattingCount
-                ),
+                "student", sanitizeUser(user),
                 "seats", seatItems
         );
     }
 
     public Map<String, Object> toggleSeatSelection(String token, String seatId) {
         Map<String, Object> user = requireUser(token);
-        int seatNumber = parseSeatNumber(seatId);
-        Seat seat = seatRepository.findBySeatNum(seatNumber)
+        User userEntity = requireUserEntity(user);
+        String normalizedSeatId = normalizeSeatId(seatId);
+        int seatNum = parseSeatNumber(normalizedSeatId);
+        Seat seat = seatRepository.findBySeatNum(seatNum)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "좌석을 찾을 수 없습니다."));
-        String normalizedSeatId = "seat-" + seatNumber;
 
-        String selectedSeatId = stringValue(user.get("selectedSeatId"));
-        if (Objects.equals(selectedSeatId, normalizedSeatId)) {
-            user.put("selectedSeatId", null);
-            studentAccountStore.save(user);
-            seatStore.releaseSeatFromUser(String.valueOf(user.get("id")));
-            seat.setCheckedIn(false);
-            seat.setVacantSince(null);
-            seat.setUpdatedAt(LocalDateTime.now());
-            if (!seat.isOccupied()) {
-                seat.setStatus("AVAILABLE");
-            }
-            seatRepository.save(seat);
-            seatApiService.syncSeatToDashboardState(seat);
-            deviceEventGateway.publishSeatStatusChanged(normalizedSeatId, "RELEASED", mapOf("userId", user.get("id")));
-            return mapOf(
-                    "message", "좌석 선택이 취소되었습니다.",
-                    "selectedSeat", null
+        SeatUsage activeUsage = seatUsageRepository.findFirstByUserIdAndCheckOutTimeIsNullOrderByCheckInTimeDesc(userEntity.getId())
+                .orElse(null);
+        if (activeUsage != null && Objects.equals(activeUsage.getSeat().getId(), seat.getId())) {
+            return releaseSeat(userEntity, activeUsage, seat, normalizedSeatId);
+        }
+        if (activeUsage != null) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "이미 " + activeUsage.getSeat().getSeatNum() + "번 좌석을 발권했습니다. 먼저 반납해주세요."
             );
         }
 
-        if (selectedSeatId != null) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "이미 " + parseSeatNumber(selectedSeatId) + "번 좌석을 선택했습니다. 먼저 기존 좌석 선택을 취소해주세요."
-            );
+        if (seatUsageRepository.findFirstBySeatIdAndCheckOutTimeIsNullOrderByCheckInTimeDesc(seat.getId()).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, seat.getSeatNum() + "번 좌석은 이미 다른 학생이 사용 중입니다.");
         }
-
-        if (!Objects.equals(seat.getStatus(), "AVAILABLE")) {
+        if (!isSelectableStatus(seat.getStatus())) {
             throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
+                    HttpStatus.BAD_REQUEST,
                     seat.getSeatNum() + "번 좌석은 " + seatStatusLabel(seat.getStatus()) + " 상태입니다."
             );
         }
 
-        user.put("selectedSeatId", normalizedSeatId);
-        studentAccountStore.save(user);
+        LocalDateTime now = LocalDateTime.now();
+        seatUsageRepository.save(new SeatUsage(seat, userEntity, now, null));
+
         seat.setCheckedIn(true);
-        seat.setStatus("RESERVED");
-        seat.setVacantSince(seat.isOccupied() ? null : LocalDateTime.now());
-        seat.setUpdatedAt(LocalDateTime.now());
+        seat.setStatus(seat.isOccupied() ? "OCCUPIED" : "RESERVED");
+        seat.setVacantSince(seat.isOccupied() ? null : now);
+        seat.setUpdatedAt(now);
         seatRepository.save(seat);
         seatApiService.syncSeatToDashboardState(seat);
-        seatStore.assignSeatToUser(normalizedSeatId, String.valueOf(user.get("id")));
-        deviceEventGateway.publishSeatStatusChanged(normalizedSeatId, "SELECTED", mapOf("userId", user.get("id")));
+        seatStore.assignSeatToUser(normalizedSeatId, String.valueOf(userEntity.getId()));
+        deviceEventGateway.publishSeatStatusChanged(normalizedSeatId, "SELECTED", mapOf("userId", userEntity.getId()));
+
         return mapOf(
-                "message", seat.getSeatNum() + "번 좌석이 선택되었습니다.",
-                "selectedSeat", seatResponse(seat, normalizedSeatId)
+                "message", seat.getSeatNum() + "번 좌석이 발권되었습니다.",
+                "selectedSeat", seatResponse(seat, normalizedSeatId),
+                "currentUser", sanitizeUser(studentAccountStore.findById(String.valueOf(userEntity.getId())).orElse(user))
         );
     }
 
+    @Transactional(readOnly = true)
     public Map<String, Object> getMySeat(String token) {
         Map<String, Object> user = requireUser(token);
-        String selectedSeatId = stringValue(user.get("selectedSeatId"));
+        String selectedSeatId = activeSeatIdForUser(toLong(user.get("id")));
         if (selectedSeatId == null) {
             return mapOf("seat", null);
         }
@@ -212,12 +215,110 @@ public class AppService {
         return mapOf("seat", seat == null ? null : seatResponse(seat, selectedSeatId));
     }
 
+    @Transactional(readOnly = true)
+    public Map<String, Object> getMyPostureStats(String token) {
+        Map<String, Object> user = requireUser(token);
+        long userId = toLong(user.get("id"));
+        LocalDate today = LocalDate.now();
+        LocalDate startDate = today.minusDays(6);
+        LocalDateTime windowStart = startDate.atStartOfDay();
+        LocalDateTime windowEnd = LocalDateTime.now();
+
+        List<SeatUsage> usages = seatUsageRepository.findAllByUserIdOrderByCheckInTimeAsc(userId).stream()
+                .filter(usage -> overlaps(usage, windowStart, windowEnd))
+                .toList();
+
+        List<PostureLog> matchedLogs = new ArrayList<>();
+        for (SeatUsage usage : usages) {
+            LocalDateTime usageStart = max(windowStart, usage.getCheckInTime());
+            LocalDateTime usageEnd = min(windowEnd, usage.getCheckOutTime() == null ? windowEnd : usage.getCheckOutTime());
+            matchedLogs.addAll(postureLogRepository.findAllBySeatNumAndCreatedAtBetweenOrderByCreatedAtAsc(
+                    usage.getSeat().getSeatNum(),
+                    usageStart,
+                    usageEnd
+            ));
+        }
+
+        Map<String, Long> postureCounts = new LinkedHashMap<>();
+        Map<LocalDate, List<PostureLog>> logsByDay = new LinkedHashMap<>();
+        for (int offset = 0; offset < 7; offset++) {
+            logsByDay.put(startDate.plusDays(offset), new ArrayList<>());
+        }
+
+        long normalCount = 0;
+        for (PostureLog log : matchedLogs) {
+            String posture = postureLabel(log.getPosture());
+            postureCounts.put(posture, postureCounts.getOrDefault(posture, 0L) + 1L);
+            LocalDate logDate = log.getCreatedAt().toLocalDate();
+            logsByDay.computeIfAbsent(logDate, ignored -> new ArrayList<>()).add(log);
+            if (isNormalPosture(log.getPosture())) {
+                normalCount++;
+            }
+        }
+
+        long totalCount = matchedLogs.size();
+        long abnormalCount = totalCount - normalCount;
+        List<Map<String, Object>> breakdown = postureCounts.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .map(entry -> mapOf(
+                        "label", entry.getKey(),
+                        "count", entry.getValue(),
+                        "percentage", totalCount == 0 ? 0 : (int) Math.round(entry.getValue() * 100.0d / totalCount)
+                ))
+                .toList();
+
+        List<Map<String, Object>> daily = logsByDay.entrySet().stream()
+                .map(entry -> {
+                    List<PostureLog> dayLogs = entry.getValue();
+                    long dayNormalCount = dayLogs.stream().filter(log -> isNormalPosture(log.getPosture())).count();
+                    String dominantPosture = dayLogs.isEmpty()
+                            ? "-"
+                            : dayLogs.stream()
+                            .collect(java.util.stream.Collectors.groupingBy(
+                                    log -> postureLabel(log.getPosture()),
+                                    LinkedHashMap::new,
+                                    java.util.stream.Collectors.counting()
+                            ))
+                            .entrySet().stream()
+                            .max(Map.Entry.comparingByValue())
+                            .map(Map.Entry::getKey)
+                            .orElse("-");
+
+                    return mapOf(
+                            "date", entry.getKey().toString(),
+                            "label", DAY_LABEL_FORMATTER.format(entry.getKey()),
+                            "totalCount", dayLogs.size(),
+                            "normalCount", dayNormalCount,
+                            "abnormalCount", dayLogs.size() - dayNormalCount,
+                            "dominantPosture", dominantPosture
+                    );
+                })
+                .toList();
+
+        String currentSeatId = activeSeatIdForUser(userId);
+        Integer currentSeatNumber = currentSeatId == null ? null : parseSeatNumber(currentSeatId);
+
+        return mapOf(
+                "rangeStart", startDate.toString(),
+                "rangeEnd", today.toString(),
+                "currentSeatNumber", currentSeatNumber,
+                "totalSamples", totalCount,
+                "normalSamples", normalCount,
+                "abnormalSamples", abnormalCount,
+                "mostFrequentPosture", postureCounts.entrySet().stream()
+                        .max(Map.Entry.comparingByValue())
+                        .map(Map.Entry::getKey)
+                        .orElse("데이터 없음"),
+                "breakdown", breakdown,
+                "daily", daily
+        );
+    }
+
+    @Transactional(readOnly = true)
     public Map<String, Object> getWarnings(String token) {
         Map<String, Object> user = requireUser(token);
-        String selectedSeatId = stringValue(user.get("selectedSeatId"));
+        String selectedSeatId = activeSeatIdForUser(toLong(user.get("id")));
         if (selectedSeatId == null) {
-            user.put("warningCount", 0);
-            studentAccountStore.save(user);
             return mapOf(
                     "warningCount", 0,
                     "warnings", List.of()
@@ -237,14 +338,13 @@ public class AppService {
                 .sorted(Comparator.comparing(AlertResponse::warningTime).reversed())
                 .toList();
 
-        user.put("warningCount", warnings.size());
-        studentAccountStore.save(user);
         return mapOf(
                 "warningCount", warnings.size(),
                 "warnings", warnings
         );
     }
 
+    @Transactional(readOnly = true)
     public Map<String, Object> getLostItems(String token) {
         requireUser(token);
         return mapOf(
@@ -254,6 +354,7 @@ public class AppService {
         );
     }
 
+    @Transactional(readOnly = true)
     public Map<String, Object> getSettings(String token) {
         Map<String, Object> user = requireUser(token);
         return mapOf("settings", userSettingsStore.findByUserIdOrDefault(String.valueOf(user.get("id"))));
@@ -286,13 +387,22 @@ public class AppService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "학생 인증 세션이 만료되었거나 유효하지 않습니다."));
     }
 
+    private User requireUserEntity(Map<String, Object> user) {
+        return userRepository.findById(toLong(user.get("id")))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "학생 계정을 찾을 수 없습니다."));
+    }
+
     private Map<String, Object> sanitizeUser(Map<String, Object> user) {
+        long userId = toLong(user.get("id"));
         return mapOf(
-                "id", user.get("id"),
+                "id", String.valueOf(user.get("id")),
                 "name", user.get("name"),
                 "studentId", user.get("studentId"),
                 "email", user.get("email"),
-                "warningCount", user.get("warningCount"),
+                "role", stringValueOrDefault(user.get("role"), "USER"),
+                "photo", user.get("photo"),
+                "createdAt", user.get("createdAt") == null ? null : String.valueOf(user.get("createdAt")),
+                "warningCount", warningCountForUser(userId),
                 "agreedToPrivacy", user.get("agreedToPrivacy")
         );
     }
@@ -309,16 +419,23 @@ public class AppService {
 
     private Map<String, Object> seatResponse(Seat seat, String selectedSeatId) {
         String seatId = seatIdFromNumber(seat.getSeatNum());
+        LocalDateTime selectedAt = seatUsageRepository.findFirstBySeatIdAndCheckOutTimeIsNullOrderByCheckInTimeDesc(seat.getId())
+                .map(SeatUsage::getCheckInTime)
+                .orElse(null);
         return mapOf(
                 "seatId", seatId,
                 "seatNumber", seat.getSeatNum(),
+                "location", seat.getLocation(),
                 "status", seat.getStatus(),
                 "statusLabel", seatStatusLabel(seat.getStatus()),
                 "checkedIn", seat.isCheckedIn(),
+                "occupied", seat.isOccupied(),
                 "posture", seat.getPosture() == null ? "정상" : seat.getPosture(),
                 "leftPressure", seat.getLeftPressure() == null ? 0 : seat.getLeftPressure(),
                 "rightPressure", seat.getRightPressure() == null ? 0 : seat.getRightPressure(),
                 "backPressure", seat.getBackPressure() == null ? 0 : seat.getBackPressure(),
+                "postureTimestamp", seat.getPostureTimestamp() == null ? null : seat.getPostureTimestamp().toString(),
+                "selectedAt", selectedAt == null ? null : selectedAt.toString(),
                 "selectedByCurrentUser", Objects.equals(seatId, selectedSeatId)
         );
     }
@@ -342,6 +459,93 @@ public class AppService {
         return studentId.substring(0, 4) + "****";
     }
 
+    private Map<String, Object> releaseSeat(User user, SeatUsage activeUsage, Seat seat, String seatId) {
+        LocalDateTime now = LocalDateTime.now();
+        activeUsage.setCheckOutTime(now);
+        seatUsageRepository.save(activeUsage);
+
+        seat.setCheckedIn(false);
+        seat.setStatus(seat.isOccupied() ? "OCCUPIED" : "AVAILABLE");
+        seat.setVacantSince(seat.isOccupied() ? seat.getVacantSince() : null);
+        seat.setUpdatedAt(now);
+        seatRepository.save(seat);
+        seatApiService.syncSeatToDashboardState(seat);
+        seatStore.releaseSeatFromUser(String.valueOf(user.getId()));
+        deviceEventGateway.publishSeatStatusChanged(seatId, "RELEASED", mapOf("userId", user.getId()));
+
+        Map<String, Object> latestUser = studentAccountStore.findById(String.valueOf(user.getId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "학생 계정을 찾을 수 없습니다."));
+
+        return mapOf(
+                "message", seat.getSeatNum() + "번 좌석이 반납되었습니다.",
+                "selectedSeat", null,
+                "currentUser", sanitizeUser(latestUser)
+        );
+    }
+
+    private boolean isSelectableStatus(String status) {
+        return Objects.equals(status, "AVAILABLE")
+                || Objects.equals(status, "RESERVED")
+                || Objects.equals(status, "OCCUPIED");
+    }
+
+    private long warningCountForUser(long userId) {
+        String selectedSeatId = activeSeatIdForUser(userId);
+        if (selectedSeatId == null) {
+            return 0;
+        }
+        return warningRepository.findAllBySeatNumOrderByWarningTimeDesc(parseSeatNumber(selectedSeatId)).size();
+    }
+
+    private String activeSeatIdForUser(long userId) {
+        return seatUsageRepository.findFirstByUserIdAndCheckOutTimeIsNullOrderByCheckInTimeDesc(userId)
+                .map(usage -> seatIdFromNumber(usage.getSeat().getSeatNum()))
+                .orElse(null);
+    }
+
+    private boolean overlaps(SeatUsage usage, LocalDateTime start, LocalDateTime end) {
+        if (usage.getCheckInTime() == null) {
+            return false;
+        }
+        LocalDateTime usageEnd = usage.getCheckOutTime() == null ? end : usage.getCheckOutTime();
+        return !usage.getCheckInTime().isAfter(end) && !usageEnd.isBefore(start);
+    }
+
+    private LocalDateTime max(LocalDateTime left, LocalDateTime right) {
+        return left.isAfter(right) ? left : right;
+    }
+
+    private LocalDateTime min(LocalDateTime left, LocalDateTime right) {
+        return left.isBefore(right) ? left : right;
+    }
+
+    private boolean isNormalPosture(String posture) {
+        if (posture == null || posture.isBlank()) {
+            return true;
+        }
+        String normalized = posture.toLowerCase(Locale.ROOT);
+        return normalized.contains("정상") || normalized.contains("normal");
+    }
+
+    private String postureLabel(String posture) {
+        if (posture == null || posture.isBlank()) {
+            return "정상";
+        }
+        if (isNormalPosture(posture)) {
+            return "정상";
+        }
+        if (posture.contains("거북목") || posture.contains("허리")) {
+            return "거북목/허리 숙임";
+        }
+        if (posture.contains("왼")) {
+            return "왼쪽 기울어짐";
+        }
+        if (posture.contains("오른")) {
+            return "오른쪽 기울어짐";
+        }
+        return posture;
+    }
+
     private Map<String, Object> defaultSettings() {
         return new LinkedHashMap<>(mapOf(
                 "pushEnabled", true,
@@ -358,12 +562,23 @@ public class AppService {
         return map;
     }
 
-    private String stringValue(Object value) {
-        return value == null ? null : String.valueOf(value);
+    private long toLong(Object value) {
+        return Long.parseLong(String.valueOf(value));
+    }
+
+    private String stringValueOrDefault(Object value, String fallback) {
+        return value == null || String.valueOf(value).isBlank() ? fallback : String.valueOf(value);
     }
 
     private int parseSeatNumber(String seatId) {
         return Integer.parseInt(seatId.replace("seat-", "").trim());
+    }
+
+    private String normalizeSeatId(String seatId) {
+        if (seatId == null || seatId.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "좌석 ID가 필요합니다.");
+        }
+        return seatId.trim().toLowerCase(Locale.ROOT);
     }
 
     private String seatIdFromNumber(int seatNum) {
