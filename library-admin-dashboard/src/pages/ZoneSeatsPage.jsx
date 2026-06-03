@@ -28,7 +28,14 @@ export default function ZoneSeatsPage() {
     () =>
       seats.filter((seat) => {
         const statusMatched = !status || seat.status === status;
-        const searchMatched = !search || String(seat.seat_num).includes(search) || seat.location.toLowerCase().includes(search.toLowerCase());
+        const keyword = search.trim().toLowerCase();
+        const searchMatched =
+          !keyword ||
+          String(seat.seat_num).includes(keyword) ||
+          String(seat.seat_code ?? '').toLowerCase().includes(keyword) ||
+          String(seat.location ?? '').toLowerCase().includes(keyword) ||
+          String(seat.posture ?? '').toLowerCase().includes(keyword) ||
+          statusLabel(seat.status).toLowerCase().includes(keyword);
         return statusMatched && searchMatched;
       }),
     [search, seats, status]
@@ -81,10 +88,12 @@ export default function ZoneSeatsPage() {
             seats={filteredSeats.map((seat) => ({
               seatId: `seat-${seat.seat_num}`,
               status: seat.status,
-              lastUpdated: seat.posture,
+              location: seat.location,
+              lastUpdated: `${statusLabel(seat.status)} · ${seat.posture}`,
             }))}
             selectedSeatId={selectedSeat ? `seat-${selectedSeat.seat_num}` : null}
             onSelect={(seat) => setSelectedSeatNum(Number(String(seat.seatId).replace('seat-', '')))}
+            variant="detailed"
           />
           <div className="mt-6">
             <DataTable columns={seatColumns} rows={filteredSeats} emptyText="검색 결과가 없습니다." />

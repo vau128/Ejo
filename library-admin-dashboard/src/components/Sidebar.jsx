@@ -2,14 +2,13 @@ import { NavLink } from 'react-router-dom';
 
 const menu = [
   { to: '/overview', label: 'Dashboard', icon: '⌂' },
-  { to: '/actions', label: '관리자 조치 기능', icon: '▣' },
-  { to: '/alert-history', label: '알림 전송 이력', icon: '⎘' },
-  { to: '/alert-management', label: '알림 관리', icon: '⚙' },
-  { to: '/statistics', label: '통계', icon: '◔' },
-  { to: '/healthcare-statistics', label: '헬스 케어 통계', icon: '♥' },
   { to: '/zone-seats', label: '좌석 현황', icon: '▦' },
+  { to: '/actions', label: '관리자 조치 기능', icon: '▣' },
   { to: '/abnormal-seats', label: '비정상 좌석', icon: '!' },
   { to: '/lost-items', label: '분실물 관리보드', icon: '◈' },
+  { to: '/alert-management', label: '알림 관리', icon: '⚙' },
+  { to: '/alert-history', label: '알림 전송 이력', icon: '⎘' },
+  { to: '/statistics', label: '통계', icon: '◔' },
   { to: '/system-status', label: '시스템 상태 모니터링', icon: '◎' },
   { to: '/settings', label: '설정', icon: '☰' },
 ];
