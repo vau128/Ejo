@@ -299,7 +299,7 @@ class _GuideCard extends StatelessWidget {
   }
 
   String _actionGuide(String posture) {
-    if (posture.contains('거북목') || posture.contains('허리')) {
+    if (posture.contains('허리') || posture.contains('숙임')) {
       return '모니터를 눈높이에 맞추고 허리를 세워 앉아주세요.';
     }
     if (posture.contains('왼')) {

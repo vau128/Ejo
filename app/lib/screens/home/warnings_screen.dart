@@ -177,8 +177,6 @@ String _titleForStatus(String status) {
       return '비정상 좌석 경고';
     case 'admin_warning':
       return '관리자 경고';
-    case 'lost_item':
-      return '분실물 경고';
     case 'vacant_long':
       return '장시간 비움 경고';
     default:
@@ -194,8 +192,6 @@ String _descriptionForStatus(String status) {
       return '좌석 상태가 비정상으로 감지되어 확인이 필요합니다.';
     case 'admin_warning':
       return '관리자가 좌석 상태 이상을 확인하고 경고를 발송했습니다.';
-    case 'lost_item':
-      return '현재 발권한 좌석에서 분실물이 감지되었습니다.';
     case 'vacant_long':
       return '발권된 좌석이 장시간 비어 있어 확인이 필요합니다.';
     default:

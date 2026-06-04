@@ -29,6 +29,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -44,6 +45,8 @@ import java.util.UUID;
 public class AppService {
 
     private static final DateTimeFormatter DAY_LABEL_FORMATTER = DateTimeFormatter.ofPattern("M/d", Locale.KOREAN);
+    private static final DateTimeFormatter APP_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.KOREAN);
+    private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
     private static final Logger log = LoggerFactory.getLogger(AppService.class);
 
     private final StudentAccountStore studentAccountStore;
@@ -187,7 +190,7 @@ public class AppService {
             );
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = nowInKorea();
         seatUsageRepository.save(new SeatUsage(seat, userEntity, now, null));
 
         seat.setCheckedIn(true);
@@ -222,10 +225,10 @@ public class AppService {
     public Map<String, Object> getMyPostureStats(String token) {
         Map<String, Object> user = requireUser(token);
         long userId = toLong(user.get("id"));
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(KOREA_ZONE);
         LocalDate startDate = today.minusDays(6);
         LocalDateTime windowStart = startDate.atStartOfDay();
-        LocalDateTime windowEnd = LocalDateTime.now();
+        LocalDateTime windowEnd = nowInKorea();
 
         List<SeatUsage> usages = seatUsageRepository.findAllByUserIdOrderByCheckInTimeAsc(userId).stream()
                 .filter(usage -> overlaps(usage, windowStart, windowEnd))
@@ -330,6 +333,7 @@ public class AppService {
 
         int seatNum = parseSeatNumber(selectedSeatId);
         List<AlertResponse> warnings = warningRepository.findAllBySeatNumOrderByWarningTimeDesc(seatNum).stream()
+                .filter(warning -> !isLostItemWarning(warning.getWarningType(), warning.getStatus()))
                 .map(warning -> new AlertResponse(
                         warning.getId(),
                         warning.getSeatNum(),
@@ -421,7 +425,7 @@ public class AppService {
         return mapOf(
                 "reportId", String.valueOf(item.getId()),
                 "seatNumber", item.getSeatNum(),
-                "detectedAt", item.getDetectedTime().toString(),
+                "detectedAt", formatAppTimestamp(item.getDetectedTime()),
                 "imageAssetPath", objectStorageUrlResolver.resolveReadUrl(item.getImageUrl()),
                 "classificationStatus", item.getCategory() == null || item.getCategory().isBlank() ? item.getStatus() : item.getCategory()
         );
@@ -435,17 +439,17 @@ public class AppService {
         return mapOf(
                 "seatId", seatId,
                 "seatNumber", seat.getSeatNum(),
-                "location", seat.getLocation(),
+                "location", seatLocation(seat.getSeatNum()),
                 "status", seat.getStatus(),
                 "statusLabel", seatStatusLabel(seat.getStatus()),
                 "checkedIn", seat.isCheckedIn(),
                 "occupied", seat.isOccupied(),
-                "posture", seat.getPosture() == null ? "정상" : seat.getPosture(),
+                "posture", postureLabel(seat.getPosture()),
                 "leftPressure", seat.getLeftPressure() == null ? 0 : seat.getLeftPressure(),
                 "rightPressure", seat.getRightPressure() == null ? 0 : seat.getRightPressure(),
                 "backPressure", seat.getBackPressure() == null ? 0 : seat.getBackPressure(),
-                "postureTimestamp", seat.getPostureTimestamp() == null ? null : seat.getPostureTimestamp().toString(),
-                "selectedAt", selectedAt == null ? null : selectedAt.toString(),
+                "postureTimestamp", seat.getPostureTimestamp() == null ? null : formatAppTimestamp(seat.getPostureTimestamp()),
+                "selectedAt", selectedAt == null ? null : formatAppTimestamp(selectedAt),
                 "selectedByCurrentUser", Objects.equals(seatId, selectedSeatId)
         );
     }
@@ -470,7 +474,7 @@ public class AppService {
     }
 
     private Map<String, Object> releaseSeat(User user, SeatUsage activeUsage, Seat seat, String seatId) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = nowInKorea();
         activeUsage.setCheckOutTime(now);
         seatUsageRepository.save(activeUsage);
 
@@ -505,7 +509,9 @@ public class AppService {
         if (selectedSeatId == null) {
             return 0;
         }
-        return warningRepository.findAllBySeatNumOrderByWarningTimeDesc(parseSeatNumber(selectedSeatId)).size();
+        return warningRepository.findAllBySeatNumOrderByWarningTimeDesc(parseSeatNumber(selectedSeatId)).stream()
+                .filter(warning -> !isLostItemWarning(warning.getWarningType(), warning.getStatus()))
+                .count();
     }
 
     private String activeSeatIdForUser(long userId) {
@@ -545,7 +551,7 @@ public class AppService {
         if (isNormalPosture(posture)) {
             return "정상";
         }
-        if (posture.contains("거북목") || posture.contains("허리")) {
+        if (posture.contains("거북목") || posture.contains("허리") || posture.contains("숙임")) {
             return "허리 숙임";
         }
         if (posture.contains("왼")) {
@@ -587,6 +593,22 @@ public class AppService {
 
     private String stringValueOrDefault(Object value, String fallback) {
         return value == null || String.valueOf(value).isBlank() ? fallback : String.valueOf(value);
+    }
+
+    private LocalDateTime nowInKorea() {
+        return LocalDateTime.now(KOREA_ZONE);
+    }
+
+    private String formatAppTimestamp(LocalDateTime time) {
+        return APP_TIMESTAMP_FORMATTER.format(time == null ? nowInKorea() : time);
+    }
+
+    private String seatLocation(int seatNum) {
+        return "A-" + seatNum;
+    }
+
+    private boolean isLostItemWarning(String warningType, String status) {
+        return "lost_item".equalsIgnoreCase(warningType) || "lost_item".equalsIgnoreCase(status);
     }
 
     private int parseSeatNumber(String seatId) {

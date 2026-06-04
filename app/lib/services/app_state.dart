@@ -238,9 +238,6 @@ class AppState extends ChangeNotifier {
           : _warningAlerts.first.id;
       final nextWarnings = await _api.fetchWarnings(token);
       _warningAlerts = nextWarnings;
-      if (nextWarnings.isNotEmpty && _isLostItemWarning(nextWarnings.first)) {
-        _lostItemReports = await _api.fetchLostItems(token);
-      }
       _currentUser = _currentUser?.copyWith(
         warningCount: _warningAlerts.length,
       );
@@ -257,11 +254,6 @@ class AppState extends ChangeNotifier {
     } on AppApiException {
       return null;
     }
-  }
-
-  bool _isLostItemWarning(WarningAlert warning) {
-    return warning.warningType.toLowerCase() == 'lost_item' ||
-        warning.status.toLowerCase() == 'lost_item';
   }
 
   Future<String?> updatePushEnabled(bool value) async {

@@ -87,7 +87,7 @@ void setup() {
     } 
     // 2) 앞/뒤 밸런스 붕괴 (등받이 안 닿음)
     else if (back_val < 500) {
-        posture = "거북목/허리 숙임";
+        posture = "허리 숙임";
     }
 
     Serial.println("Detected Posture: " + posture);

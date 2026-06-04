@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -33,6 +34,7 @@ import java.util.UUID;
 public class DashboardService {
 
     private static final DateTimeFormatter HISTORY_FORMATTER = DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm", Locale.KOREAN);
+    private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
 
     private final DashboardOperationsStore dashboardOperationsStore;
     private final DeviceEventGateway deviceEventGateway;
@@ -118,7 +120,7 @@ public class DashboardService {
     public Map<String, Object> sendWarning(String seatId) {
         Map<String, Object> seat = findSeatView(seatId);
         Seat seatEntity = findSeatEntity(seatId);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = nowInKorea();
         Warning warning = warningRepository.save(new Warning(
                 seatEntity,
                 seatEntity.getSeatNum(),
@@ -163,7 +165,7 @@ public class DashboardService {
         if ("VACANT_LONG".equals(normalizeSeatStatus(seat.getStatus()))) {
             seat.setStatus(seat.isOccupied() ? "OCCUPIED" : seat.isCheckedIn() ? "RESERVED" : "AVAILABLE");
         }
-        seat.setUpdatedAt(LocalDateTime.now());
+        seat.setUpdatedAt(nowInKorea());
         seatRepository.save(seat);
         addHistory(seatId, "처리 완료", "관리자 처리", "전송 완료", "비정상 상태 확인 후 처리 완료로 변경했습니다.");
         addSensorLog("ISSUE_RESOLVED", seatId, "edge-rpi-01", "resolved", "현장 점검 후 처리 완료", "정상");
@@ -378,9 +380,9 @@ public class DashboardService {
         Map<String, Object> response = new LinkedHashMap<>(seat);
         response.put("sensor", sensor);
         response.put("history", List.of(
-                mapOf("time", HISTORY_FORMATTER.format(LocalDateTime.now().minusMinutes(18)), "statusLabel", "정상 착석", "reason", "압력 센서와 카메라에서 사용자 착석 감지"),
-                mapOf("time", HISTORY_FORMATTER.format(LocalDateTime.now().minusMinutes(10)), "statusLabel", String.valueOf(seat.get("statusLabel")), "reason", String.valueOf(seat.get("issueType"))),
-                mapOf("time", HISTORY_FORMATTER.format(LocalDateTime.now().minusMinutes(3)), "statusLabel", "관리자 확인 대기", "reason", String.valueOf(seat.get("notes")))
+                mapOf("time", HISTORY_FORMATTER.format(nowInKorea().minusMinutes(18)), "statusLabel", "정상 착석", "reason", "압력 센서와 카메라에서 사용자 착석 감지"),
+                mapOf("time", HISTORY_FORMATTER.format(nowInKorea().minusMinutes(10)), "statusLabel", String.valueOf(seat.get("statusLabel")), "reason", String.valueOf(seat.get("issueType"))),
+                mapOf("time", HISTORY_FORMATTER.format(nowInKorea().minusMinutes(3)), "statusLabel", "관리자 확인 대기", "reason", String.valueOf(seat.get("notes")))
         ));
         return response;
     }
@@ -540,7 +542,7 @@ public class DashboardService {
         seat.setCheckedIn(false);
         seat.setVacantSince(null);
         seat.setStatus(seat.isOccupied() ? "OCCUPIED" : "AVAILABLE");
-        seat.setUpdatedAt(LocalDateTime.now());
+        seat.setUpdatedAt(nowInKorea());
         seatRepository.save(seat);
 
         if (student != null) {
@@ -625,11 +627,11 @@ public class DashboardService {
                 "seatId", seatId,
                 "status", "AVAILABLE",
                 "statusLabel", statusLabel("AVAILABLE"),
-                "lastUpdated", HISTORY_FORMATTER.format(LocalDateTime.now()),
+                "lastUpdated", HISTORY_FORMATTER.format(nowInKorea()),
                 "notes", "로컬 IoT 좌석",
                 "abnormal", false,
                 "issueType", "정상 이용",
-                "detectedAt", HISTORY_FORMATTER.format(LocalDateTime.now()),
+                "detectedAt", HISTORY_FORMATTER.format(nowInKorea()),
                 "durationMinutes", 0,
                 "sensorHint", "mqtt local test",
                 "actionStatus", "정상",
@@ -689,7 +691,7 @@ public class DashboardService {
                 "studentIdMasked", "2023****",
                 "messageType", messageType,
                 "channel", channel,
-                "createdAt", HISTORY_FORMATTER.format(LocalDateTime.now()),
+                "createdAt", HISTORY_FORMATTER.format(nowInKorea()),
                 "status", status,
                 "message", message
         ));
@@ -698,7 +700,7 @@ public class DashboardService {
     private void addSensorLog(String eventType, String seatId, String deviceId, String value, String message, String status) {
         dashboardOperationsStore.prependSensorLog(mapOf(
                 "id", UUID.randomUUID().toString(),
-                "timestamp", HISTORY_FORMATTER.format(LocalDateTime.now()),
+                "timestamp", HISTORY_FORMATTER.format(nowInKorea()),
                 "deviceId", deviceId,
                 "seatId", seatId,
                 "eventType", eventType,
@@ -738,7 +740,7 @@ public class DashboardService {
             return;
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = nowInKorea();
         for (int seatNum = 1; seatNum <= 4; seatNum++) {
             seatRepository.save(new Seat(
                     seatNum,
@@ -817,11 +819,21 @@ public class DashboardService {
     }
 
     private String defaultPosture(String posture) {
-        return posture == null || posture.isBlank() ? "정상" : posture;
+        if (posture == null || posture.isBlank()) {
+            return "정상";
+        }
+        if (posture.contains("거북목") || posture.contains("허리") || posture.contains("숙임")) {
+            return "허리 숙임";
+        }
+        return posture;
     }
 
     private LocalDateTime defaultTime(LocalDateTime time) {
-        return time == null ? LocalDateTime.now() : time;
+        return time == null ? nowInKorea() : time;
+    }
+
+    private LocalDateTime nowInKorea() {
+        return LocalDateTime.now(KOREA_ZONE);
     }
 
     private int calculateVacantMinutes(Seat seat) {

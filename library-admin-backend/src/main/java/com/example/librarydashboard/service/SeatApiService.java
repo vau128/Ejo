@@ -37,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
@@ -51,6 +52,8 @@ public class SeatApiService {
     private static final String SQUATTING_THRESHOLD_KEY = "squatting_threshold_minutes";
     private static final int DEFAULT_SQUATTING_THRESHOLD_MINUTES = 60;
     private static final DateTimeFormatter DASHBOARD_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm", Locale.KOREAN);
+    private static final DateTimeFormatter APP_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.KOREAN);
+    private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
     private static final Logger log = LoggerFactory.getLogger(SeatApiService.class);
 
     private final SeatRepository seatRepository;
@@ -120,7 +123,7 @@ public class SeatApiService {
         Seat seat = ensureSeat(request.seatNum());
         String previousStatus = seat.getStatus();
         LocalDateTime sensorTimestamp = toLocalDateTime(request.timestamp());
-        LocalDateTime serverTimestamp = LocalDateTime.now();
+        LocalDateTime serverTimestamp = nowInKorea();
         int combinedPressure = request.leftPressure() + request.rightPressure() + request.backPressure();
         boolean occupied = request.leftPressure() > 0 || request.rightPressure() > 0 || request.backPressure() > 0;
 
@@ -151,7 +154,7 @@ public class SeatApiService {
     public MessageResponse markSquatting(SeatSquattingRequest request) {
         Seat seat = ensureSeat(request.seatNum());
         String status = normalizeSquattingStatus(request.status());
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = nowInKorea();
 
         seat.setCheckedIn(true);
         seat.setOccupied(false);
@@ -180,7 +183,7 @@ public class SeatApiService {
         postureLogRepository.deleteAllInBatch();
         seatUsageRepository.deleteAllInBatch();
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = nowInKorea();
         for (int seatNum = 1; seatNum <= 4; seatNum++) {
             Seat seat = ensureSeat(seatNum);
             seat.setPressure(0);
@@ -208,7 +211,7 @@ public class SeatApiService {
 
     public MessageResponse saveLostItem(LostItemSaveRequest request) {
         Seat seat = ensureSeat(request.seatNum());
-        LocalDateTime detectedAt = LocalDateTime.now();
+        LocalDateTime detectedAt = nowInKorea();
         LostItem saved = lostItemRepository.save(new LostItem(
                 seat,
                 request.seatNum(),
@@ -217,17 +220,8 @@ public class SeatApiService {
                 "FOUND",
                 detectedAt
         ));
-        Warning warning = warningRepository.save(new Warning(
-                seat,
-                seat.getSeatNum(),
-                "LOST_ITEM",
-                "lost_item",
-                seat.getSeatNum() + "번 좌석에서 분실물이 감지되었습니다.",
-                detectedAt
-        ));
 
         syncLostItemToDashboard(saved);
-        syncWarningToDashboard(warning);
         return new MessageResponse("lost item saved");
     }
 
@@ -239,7 +233,7 @@ public class SeatApiService {
         try {
             deviceEventGateway.publishCommand("admin/trigger_lost_item", Map.of(
                     "command", request.command(),
-                    "triggeredAt", LocalDateTime.now().toString()
+                    "triggeredAt", formatAppTime(nowInKorea())
             ));
             prependSensorLog("LOST_ITEM_SCAN", "ADMIN", "dashboard-web", request.command(), "분실물 스캔 명령을 전송했습니다.", "정상");
             return new MessageResponse("lost item scan triggered");
@@ -353,7 +347,7 @@ public class SeatApiService {
 
     public Seat ensureSeat(int seatNum) {
         bootstrapSeatsIfEmpty();
-        return seatRepository.findBySeatNum(seatNum)
+        Seat existing = seatRepository.findBySeatNum(seatNum)
                 .orElseGet(() -> seatRepository.save(new Seat(
                         seatNum,
                         seatLocation(seatNum),
@@ -368,8 +362,10 @@ public class SeatApiService {
                         0,
                         null,
                         null,
-                        LocalDateTime.now()
+                        nowInKorea()
                 )));
+        normalizeSeatMetadata(existing);
+        return existing;
     }
 
     public int getSquattingThresholdMinutes() {
@@ -381,11 +377,14 @@ public class SeatApiService {
 
     public void bootstrapSeatsIfEmpty() {
         if (seatRepository.count() > 0) {
+            seatRepository.findAll().stream()
+                    .filter(seat -> seat.getSeatNum() != null && seat.getSeatNum() >= 1 && seat.getSeatNum() <= 4)
+                    .forEach(this::normalizeSeatMetadata);
             ensureDefaultThreshold();
             return;
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = nowInKorea();
         for (int seatNum = 1; seatNum <= 4; seatNum++) {
             seatRepository.save(new Seat(
                     seatNum,
@@ -483,11 +482,11 @@ public class SeatApiService {
         shell.put("seatNumber", seatNum);
         shell.put("status", "AVAILABLE");
         shell.put("statusLabel", statusLabel("AVAILABLE"));
-        shell.put("lastUpdated", formatDashboardTime(LocalDateTime.now()));
+        shell.put("lastUpdated", formatDashboardTime(nowInKorea()));
         shell.put("notes", "IoT 자동 생성 좌석");
         shell.put("abnormal", false);
         shell.put("issueType", "정상 이용");
-        shell.put("detectedAt", formatDashboardTime(LocalDateTime.now()));
+        shell.put("detectedAt", formatDashboardTime(nowInKorea()));
         shell.put("durationMinutes", 0);
         shell.put("sensorHint", "left 0 / right 0 / back 0");
         shell.put("actionStatus", "정상");
@@ -507,7 +506,7 @@ public class SeatApiService {
     private void prependSensorLog(String eventType, String seatId, String deviceId, String value, String message, String status) {
         Map<String, Object> log = new LinkedHashMap<>();
         log.put("id", "LOG-" + System.currentTimeMillis());
-        log.put("timestamp", formatDashboardTime(LocalDateTime.now()));
+        log.put("timestamp", formatDashboardTime(nowInKorea()));
         log.put("deviceId", deviceId);
         log.put("seatId", seatId);
         log.put("eventType", eventType);
@@ -556,7 +555,7 @@ public class SeatApiService {
 
     private Map<String, Object> squattingThresholdPayload(int thresholdMinutes) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("triggeredAt", LocalDateTime.now().toString());
+        payload.put("triggeredAt", formatAppTime(nowInKorea()));
         if (thresholdMinutes == 10) {
             payload.put("limit_seconds", 10);
         } else {
@@ -584,15 +583,46 @@ public class SeatApiService {
     }
 
     private String defaultPosture(String posture) {
-        return posture == null || posture.isBlank() ? "정상" : posture;
+        if (posture == null || posture.isBlank()) {
+            return "정상";
+        }
+        if (posture.contains("거북목") || posture.contains("허리") || posture.contains("숙임")) {
+            return "허리 숙임";
+        }
+        return posture;
     }
 
     private String formatDashboardTime(LocalDateTime time) {
-        return DASHBOARD_TIME_FORMATTER.format(time == null ? LocalDateTime.now() : time);
+        return DASHBOARD_TIME_FORMATTER.format(time == null ? nowInKorea() : time);
     }
 
     private LocalDateTime toLocalDateTime(OffsetDateTime offsetDateTime) {
-        return offsetDateTime.atZoneSameInstant(java.time.ZoneId.systemDefault()).toLocalDateTime();
+        return offsetDateTime.atZoneSameInstant(KOREA_ZONE).toLocalDateTime();
+    }
+
+    private String formatAppTime(LocalDateTime time) {
+        return APP_TIME_FORMATTER.format(time == null ? nowInKorea() : time);
+    }
+
+    private LocalDateTime nowInKorea() {
+        return LocalDateTime.now(KOREA_ZONE);
+    }
+
+    private void normalizeSeatMetadata(Seat seat) {
+        String expectedLocation = seatLocation(seat.getSeatNum());
+        String expectedCode = seatCode(seat.getSeatNum());
+        boolean changed = false;
+        if (!expectedLocation.equals(seat.getLocation())) {
+            seat.setLocation(expectedLocation);
+            changed = true;
+        }
+        if (!expectedCode.equals(seat.getSeatCode())) {
+            seat.setSeatCode(expectedCode);
+            changed = true;
+        }
+        if (changed) {
+            seatRepository.save(seat);
+        }
     }
 
     private void updateSeatOccupancyState(Seat seat, boolean occupied, LocalDateTime sensorTimestamp) {

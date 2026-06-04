@@ -11,18 +11,12 @@ class LostItemReportsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final reports = appState.lostItemReports;
-    final mySeat = appState.mySeat;
-    final hasSeatLostItem = mySeat != null && reports.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(title: const Text('분실물 리포트')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (hasSeatLostItem) ...[
-            _LostItemBanner(seatNumber: mySeat.number, reportCount: reports.length),
-            const SizedBox(height: 12),
-          ],
           if (reports.isEmpty)
             const _EmptyState()
           else
@@ -33,40 +27,6 @@ class LostItemReportsScreen extends StatelessWidget {
                 child: _ReportCard(report: report),
               );
             }),
-        ],
-      ),
-    );
-  }
-}
-
-class _LostItemBanner extends StatelessWidget {
-  const _LostItemBanner({required this.seatNumber, required this.reportCount});
-
-  final int seatNumber;
-  final int reportCount;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      decoration: BoxDecoration(
-        color: colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(
-        children: [
-          Icon(Icons.notification_important_outlined, color: colorScheme.onErrorContainer),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              '$seatNumber번 좌석에서 분실물 $reportCount건이 감지되었습니다.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onErrorContainer,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
         ],
       ),
     );
