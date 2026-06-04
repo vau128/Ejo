@@ -1,5 +1,7 @@
 package com.example.librarydashboard.service;
 
+import com.example.librarydashboard.config.IotMqttProperties;
+import com.example.librarydashboard.config.IotProperties;
 import com.example.librarydashboard.dto.seat.AlertResponse;
 import com.example.librarydashboard.dto.seat.CheckInStatusResponse;
 import com.example.librarydashboard.dto.seat.LostItemResponse;
@@ -59,6 +61,8 @@ public class SeatApiService {
     private final DashboardOperationsStore dashboardOperationsStore;
     private final DeviceEventGateway deviceEventGateway;
     private final IotAdminTriggerClient iotAdminTriggerClient;
+    private final IotProperties iotProperties;
+    private final IotMqttProperties iotMqttProperties;
     private final ObjectStorageUrlResolver objectStorageUrlResolver;
     private final CheckInStatusService checkInStatusService;
     private final StudentAccountStore studentAccountStore;
@@ -73,6 +77,8 @@ public class SeatApiService {
             DashboardOperationsStore dashboardOperationsStore,
             DeviceEventGateway deviceEventGateway,
             IotAdminTriggerClient iotAdminTriggerClient,
+            IotProperties iotProperties,
+            IotMqttProperties iotMqttProperties,
             ObjectStorageUrlResolver objectStorageUrlResolver,
             CheckInStatusService checkInStatusService,
             StudentAccountStore studentAccountStore,
@@ -86,6 +92,8 @@ public class SeatApiService {
         this.dashboardOperationsStore = dashboardOperationsStore;
         this.deviceEventGateway = deviceEventGateway;
         this.iotAdminTriggerClient = iotAdminTriggerClient;
+        this.iotProperties = iotProperties;
+        this.iotMqttProperties = iotMqttProperties;
         this.objectStorageUrlResolver = objectStorageUrlResolver;
         this.checkInStatusService = checkInStatusService;
         this.studentAccountStore = studentAccountStore;
@@ -214,6 +222,10 @@ public class SeatApiService {
     }
 
     public MessageResponse triggerLostItemScan(LostItemScanTriggerRequest request) {
+        if (!iotMqttProperties.enabled()) {
+            return triggerLostItemScanOverHttpFallback(request);
+        }
+
         try {
             deviceEventGateway.publishCommand("admin/trigger_lost_item", Map.of(
                     "command", request.command(),
@@ -223,15 +235,24 @@ public class SeatApiService {
             return new MessageResponse("lost item scan triggered");
         } catch (RuntimeException mqttException) {
             log.error("Failed to publish lost item scan command over MQTT", mqttException);
-            try {
-                iotAdminTriggerClient.triggerLostItemScan(request.command());
-                prependSensorLog("LOST_ITEM_SCAN", "ADMIN", "dashboard-web", request.command(), "분실물 스캔 명령을 HTTP fallback으로 전송했습니다.", "정상");
-                return new MessageResponse("lost item scan triggered");
-            } catch (RuntimeException httpException) {
-                log.error("Failed to publish lost item scan command over HTTP fallback", httpException);
-                prependSensorLog("LOST_ITEM_SCAN", "ADMIN", "dashboard-web", request.command(), "분실물 스캔 명령 전송에 실패했습니다.", "오류");
-                return new MessageResponse("분실물 스캔 요청은 접수됐지만 라즈베리파이 전송에 실패했습니다.");
-            }
+            return triggerLostItemScanOverHttpFallback(request);
+        }
+    }
+
+    private MessageResponse triggerLostItemScanOverHttpFallback(LostItemScanTriggerRequest request) {
+        if (!iotProperties.enabled()) {
+            prependSensorLog("LOST_ITEM_SCAN", "ADMIN", "dashboard-web", request.command(), "분실물 스캔 명령 전송에 실패했습니다. IoT 연동이 비활성화되어 있습니다.", "오류");
+            return new MessageResponse("분실물 스캔 요청은 접수됐지만 라즈베리파이 전송에 실패했습니다.");
+        }
+
+        try {
+            iotAdminTriggerClient.triggerLostItemScan(request.command());
+            prependSensorLog("LOST_ITEM_SCAN", "ADMIN", "dashboard-web", request.command(), "분실물 스캔 명령을 HTTP fallback으로 전송했습니다.", "정상");
+            return new MessageResponse("lost item scan triggered");
+        } catch (RuntimeException httpException) {
+            log.error("Failed to publish lost item scan command over HTTP fallback", httpException);
+            prependSensorLog("LOST_ITEM_SCAN", "ADMIN", "dashboard-web", request.command(), "분실물 스캔 명령 전송에 실패했습니다.", "오류");
+            return new MessageResponse("분실물 스캔 요청은 접수됐지만 라즈베리파이 전송에 실패했습니다.");
         }
     }
 

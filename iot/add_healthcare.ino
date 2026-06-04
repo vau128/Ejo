@@ -5,7 +5,7 @@
 const char* ssid = "yerin";
 const char* password = "20040821";
 const char* mqtt_server = "0.tcp.jp.ngrok.io";
-const int mqtt_port = 28899;
+const int mqtt_port = 11606;
 
 // [2. 좌석 및 센서 핀 설정]
 #define SEAT_NUM 2
