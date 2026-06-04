@@ -26,7 +26,7 @@ export default function OverviewPage() {
       <PageHeader title="Overview" description="전체 현황과 주요 운영 항목을 한 화면에서 확인합니다." />
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-        <MetricCard compact label="총 좌석 수" value={summary.totalSeats} helper="통합 테스트 기준 4석" />
+        <MetricCard compact label="총 좌석 수" value={summary.totalSeats} helper="운영 기준 4석" />
         <MetricCard compact label="사용 좌석 수" value={summary.occupiedSeats} helper="실시간 점유" accent="emerald" />
         <MetricCard compact label="사용 가능" value={summary.availableSeats} helper="즉시 이용 가능" />
         <MetricCard compact label="비정상 좌석" value={summary.abnormalSeats} helper="확인 필요" accent="rose" />

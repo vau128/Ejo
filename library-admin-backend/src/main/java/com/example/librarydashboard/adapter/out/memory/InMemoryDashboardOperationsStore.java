@@ -195,7 +195,6 @@ public class InMemoryDashboardOperationsStore implements DashboardOperationsStor
     }
 
     private void seedAlertRules() {
-        alertRules.add(mapOf("ruleId", "RULE-01", "name", "물품 장기 방치 알림", "condition", "압력 미감지 + 물체 감지", "thresholdMinutes", 10, "channel", "앱 푸시", "enabled", true, "targetType", "물품 방치"));
         alertRules.add(mapOf("ruleId", "RULE-02", "name", "장시간 비움 알림", "condition", "압력 0 + 사람 미감지 지속", "thresholdMinutes", 15, "channel", "앱 푸시", "enabled", true, "targetType", "장시간 비움"));
         alertRules.add(mapOf("ruleId", "RULE-03", "name", "센서 지연 점검", "condition", "게이트웨이 지연 1000ms 초과", "thresholdMinutes", 5, "channel", "관리자 처리", "enabled", true, "targetType", "센서 지연"));
         alertRules.add(mapOf("ruleId", "RULE-04", "name", "심야 자동 알림", "condition", "폐관 전 미반납 좌석", "thresholdMinutes", 5, "channel", "앱 푸시", "enabled", false, "targetType", "폐관 관리"));

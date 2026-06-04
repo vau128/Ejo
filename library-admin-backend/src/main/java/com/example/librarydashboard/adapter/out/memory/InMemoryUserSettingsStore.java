@@ -31,7 +31,7 @@ public class InMemoryUserSettingsStore implements UserSettingsStore {
         Map<String, Object> settings = new LinkedHashMap<>();
         settings.put("pushEnabled", true);
         settings.put("seatAlertEnabled", true);
-        settings.put("warningAlertEnabled", false);
+        settings.put("warningAlertEnabled", true);
         return settings;
     }
 }

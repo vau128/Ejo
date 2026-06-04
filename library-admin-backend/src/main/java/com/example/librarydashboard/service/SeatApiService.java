@@ -208,16 +208,26 @@ public class SeatApiService {
 
     public MessageResponse saveLostItem(LostItemSaveRequest request) {
         Seat seat = ensureSeat(request.seatNum());
+        LocalDateTime detectedAt = LocalDateTime.now();
         LostItem saved = lostItemRepository.save(new LostItem(
                 seat,
                 request.seatNum(),
                 request.category(),
                 request.imageUrl(),
                 "FOUND",
-                LocalDateTime.now()
+                detectedAt
+        ));
+        Warning warning = warningRepository.save(new Warning(
+                seat,
+                seat.getSeatNum(),
+                "LOST_ITEM",
+                "lost_item",
+                seat.getSeatNum() + "번 좌석에서 분실물이 감지되었습니다.",
+                detectedAt
         ));
 
         syncLostItemToDashboard(saved);
+        syncWarningToDashboard(warning);
         return new MessageResponse("lost item saved");
     }
 
@@ -444,8 +454,8 @@ public class SeatApiService {
         history.put("id", "ALERT-" + warning.getId());
         history.put("seatId", seatCode(warning.getSeatNum()));
         history.put("studentIdMasked", "TEMP");
-        history.put("messageType", "사석화 감지");
-        history.put("channel", "IoT");
+        history.put("messageType", dashboardWarningType(warning));
+        history.put("channel", "앱 푸시");
         history.put("createdAt", formatDashboardTime(warning.getWarningTime()));
         history.put("status", "전송 완료");
         history.put("message", warning.getMessage());
@@ -587,15 +597,15 @@ public class SeatApiService {
 
     private void updateSeatOccupancyState(Seat seat, boolean occupied, LocalDateTime sensorTimestamp) {
         seat.setOccupied(occupied);
-        if (occupied) {
-            seat.setVacantSince(null);
-            seat.setStatus("OCCUPIED");
-            return;
-        }
-
         if (!seat.isCheckedIn()) {
             seat.setVacantSince(null);
             seat.setStatus("AVAILABLE");
+            return;
+        }
+
+        if (occupied) {
+            seat.setVacantSince(null);
+            seat.setStatus("OCCUPIED");
             return;
         }
 
@@ -603,17 +613,24 @@ public class SeatApiService {
             seat.setVacantSince(sensorTimestamp);
         }
 
-        long vacantMinutes = ChronoUnit.MINUTES.between(seat.getVacantSince(), sensorTimestamp);
-        if (vacantMinutes >= getSquattingThresholdMinutes()) {
-            seat.setStatus("VACANT_LONG");
-            return;
-        }
-
-        seat.setStatus(baseStatusFor(true, false));
+        seat.setStatus("VACANT_LONG");
     }
 
     private void appendSquattingWarningIfNeeded(Seat seat, String previousStatus, LocalDateTime eventTime) {
-        if (!"VACANT_LONG".equals(seat.getStatus()) || "VACANT_LONG".equals(previousStatus)) {
+        if (!"VACANT_LONG".equals(seat.getStatus()) || seat.getVacantSince() == null) {
+            return;
+        }
+
+        long vacantMinutes = ChronoUnit.MINUTES.between(seat.getVacantSince(), eventTime);
+        if (vacantMinutes < getSquattingThresholdMinutes()) {
+            return;
+        }
+
+        Warning lastWarning = warningRepository.findFirstBySeatNumAndStatusOrderByWarningTimeDesc(
+                seat.getSeatNum(),
+                "vacant_long"
+        );
+        if (lastWarning != null && !lastWarning.getWarningTime().isBefore(seat.getVacantSince())) {
             return;
         }
 
@@ -645,7 +662,6 @@ public class SeatApiService {
 
     private String dashboardIssueType(String status) {
         return switch (status) {
-            case "RESERVED" -> "발권 후 미착석";
             case "VACANT_LONG" -> "장시간 자리 비움";
             case "OBJECT_ONLY" -> "물품만 감지됨";
             case "SENSOR_DELAY" -> "센서 수집 지연";
@@ -655,11 +671,19 @@ public class SeatApiService {
 
     private String dashboardNotes(String status) {
         return switch (status) {
-            case "RESERVED" -> "학생이 좌석을 선택했지만 아직 착석이 감지되지 않았습니다.";
             case "VACANT_LONG" -> "발권 또는 착석 이력 이후 압력 미감지 시간이 기준을 초과했습니다.";
             case "OBJECT_ONLY" -> "사람 없이 물품만 감지된 좌석입니다.";
             case "SENSOR_DELAY" -> "센서 데이터 수집이 지연되고 있습니다.";
             default -> "정상 이용 중";
+        };
+    }
+
+    private String dashboardWarningType(Warning warning) {
+        return switch (warning.getStatus().toLowerCase(Locale.ROOT)) {
+            case "lost_item" -> "분실물 감지";
+            case "admin_warning" -> "관리자 경고";
+            case "vacant_long" -> "장시간 비움";
+            default -> "좌석 경고";
         };
     }
 }

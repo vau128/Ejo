@@ -150,7 +150,7 @@ public class DashboardService {
 
     public Map<String, Object> forceCheckout(String seatId) {
         Seat seat = findSeatEntity(seatId);
-        Map<String, Object> releasedStudent = clearSeatAssignment(seat, "관리자가 테스트용으로 학생을 강제 퇴실 처리했습니다.");
+        Map<String, Object> releasedStudent = clearSeatAssignment(seat, "관리자가 학생을 강제 퇴실 처리했습니다.");
         String studentName = releasedStudent == null ? "미연결 사용자" : String.valueOf(releasedStudent.get("name"));
         addHistory(seatId, "강제 퇴실", "관리자 처리", "전송 완료", studentName + " 학생을 강제 퇴실 처리했습니다.");
         addSensorLog("FORCED_CHECKOUT", seatId, "dashboard-web", studentName, "관리자 강제 퇴실 처리", "정상");
@@ -253,7 +253,7 @@ public class DashboardService {
 
         List<Map<String, Object>> postureBreakdown = List.of(
                 mapOf("label", "정상", "value", recentLogs.stream().filter(log -> isNormalPosture(log.getPosture())).count()),
-                mapOf("label", "거북목/허리 숙임", "value", recentLogs.stream().filter(log -> isPosture(log, "거북목", "허리 숙임")).count()),
+                mapOf("label", "허리 숙임", "value", recentLogs.stream().filter(log -> isPosture(log, "거북목", "허리 숙임")).count()),
                 mapOf("label", "왼쪽 기울어짐", "value", recentLogs.stream().filter(log -> isPosture(log, "왼쪽")).count()),
                 mapOf("label", "오른쪽 기울어짐", "value", recentLogs.stream().filter(log -> isPosture(log, "오른쪽")).count())
         );
@@ -626,7 +626,7 @@ public class DashboardService {
                 "status", "AVAILABLE",
                 "statusLabel", statusLabel("AVAILABLE"),
                 "lastUpdated", HISTORY_FORMATTER.format(LocalDateTime.now()),
-                "notes", "로컬 IoT 테스트 좌석",
+                "notes", "로컬 IoT 좌석",
                 "abnormal", false,
                 "issueType", "정상 이용",
                 "detectedAt", HISTORY_FORMATTER.format(LocalDateTime.now()),

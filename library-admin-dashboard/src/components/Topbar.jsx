@@ -5,7 +5,6 @@ const sectionMap = {
   '/overview': '대시보드',
   '/actions': '실시간 조치',
   '/alert-history': '알림 이력',
-  '/healthcare-statistics': '헬스케어',
   '/alert-management': '알림 설정',
   '/settings': '설정',
   '/statistics': '통계',

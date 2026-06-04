@@ -68,14 +68,11 @@ export default function ActionsPage() {
   const activeCheckInColumns = useMemo(
     () => [
       { key: 'seatId', label: '좌석' },
-      { key: 'studentName', label: '학생 이름' },
-      { key: 'studentIdMasked', label: '학번' },
       { key: 'statusLabel', label: '현재 상태', render: (row) => <StatusBadge>{row.statusLabel}</StatusBadge> },
-      { key: 'posture', label: '자세' },
       { key: 'lastUpdated', label: '최종 갱신' },
       {
         key: 'actions',
-        label: '관리자 테스트 조치',
+        label: '관리자 조치',
         render: (row) => (
           <button
             onClick={() => handleAction('force-checkout', row.seatId)}
@@ -107,7 +104,7 @@ export default function ActionsPage() {
         <DataTable columns={columns} rows={data.queue} emptyText="현재 조치가 필요한 좌석이 없습니다." />
       </SectionCard>
 
-      <SectionCard title="학생 발권 현황" subtitle="테스트 중 앱에서 체크아웃하지 못한 학생을 관리자가 강제 퇴실 처리할 수 있습니다." className="mt-6">
+      <SectionCard title="학생 발권 현황" subtitle="앱에서 체크아웃하지 못한 학생을 관리자가 강제 퇴실 처리할 수 있습니다." className="mt-6">
         <DataTable columns={activeCheckInColumns} rows={data.activeCheckIns} emptyText="현재 발권 중인 학생이 없습니다." />
       </SectionCard>
     </div>

@@ -11,17 +11,80 @@ class LostItemReportsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final reports = appState.lostItemReports;
+    final mySeat = appState.mySeat;
+    final hasSeatLostItem = mySeat != null && reports.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(title: const Text('분실물 리포트')),
-      body: ListView.separated(
+      body: ListView(
         padding: const EdgeInsets.all(16),
-        itemCount: reports.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 12),
-        itemBuilder: (context, index) {
-          final report = reports[index];
-          return _ReportCard(report: report);
-        },
+        children: [
+          if (hasSeatLostItem) ...[
+            _LostItemBanner(seatNumber: mySeat.number, reportCount: reports.length),
+            const SizedBox(height: 12),
+          ],
+          if (reports.isEmpty)
+            const _EmptyState()
+          else
+            ...List.generate(reports.length, (index) {
+              final report = reports[index];
+              return Padding(
+                padding: EdgeInsets.only(bottom: index == reports.length - 1 ? 0 : 12),
+                child: _ReportCard(report: report),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+}
+
+class _LostItemBanner extends StatelessWidget {
+  const _LostItemBanner({required this.seatNumber, required this.reportCount});
+
+  final int seatNumber;
+  final int reportCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          Icon(Icons.notification_important_outlined, color: colorScheme.onErrorContainer),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '$seatNumber번 좌석에서 분실물 $reportCount건이 감지되었습니다.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onErrorContainer,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48),
+      child: Center(
+        child: Text(
+          '현재 좌석에 등록된 분실물 리포트가 없습니다.',
+          style: Theme.of(context).textTheme.bodyLarge,
+        ),
       ),
     );
   }

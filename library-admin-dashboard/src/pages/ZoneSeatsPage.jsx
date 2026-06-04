@@ -13,8 +13,7 @@ const filters = [
   { value: '', label: '전체' },
   { value: 'OCCUPIED', label: '사용 중' },
   { value: 'AVAILABLE', label: '비어있음' },
-  { value: 'SQUATTING', label: '사석화' },
-  { value: 'ABNORMAL', label: '비정상' },
+  { value: 'VACANT_LONG', label: '장시간 비움' },
 ];
 
 export default function ZoneSeatsPage() {
@@ -34,7 +33,6 @@ export default function ZoneSeatsPage() {
           String(seat.seat_num).includes(keyword) ||
           String(seat.seat_code ?? '').toLowerCase().includes(keyword) ||
           String(seat.location ?? '').toLowerCase().includes(keyword) ||
-          String(seat.posture ?? '').toLowerCase().includes(keyword) ||
           statusLabel(seat.status).toLowerCase().includes(keyword);
         return statusMatched && searchMatched;
       }),
@@ -48,7 +46,6 @@ export default function ZoneSeatsPage() {
       { key: 'seat_num', label: '좌석' },
       { key: 'status', label: '상태', render: (row) => <StatusBadge>{statusLabel(row.status)}</StatusBadge> },
       { key: 'checked_in', label: '발권', render: (row) => (row.checked_in ? '발권 중' : '미발권') },
-      { key: 'posture', label: '현재 자세' },
       { key: 'location', label: '위치' },
     ],
     []
@@ -59,13 +56,13 @@ export default function ZoneSeatsPage() {
 
   return (
     <div>
-      <PageHeader title="좌석 현황" description="4개 좌석의 사석화 상태와 현재 자세, 압력값을 한 번에 확인합니다." />
+      <PageHeader title="좌석 현황" description="4개 좌석의 발권 상태와 이용 현황만 확인합니다." />
 
       <div className="grid gap-4 md:grid-cols-4">
         <MetricCard label="총 좌석 수" value={seats.length} helper="조회 API 기준" />
         <MetricCard label="사용 좌석 수" value={seats.filter((seat) => seat.status === 'OCCUPIED').length} helper="현재 점유" accent="emerald" />
         <MetricCard label="발권 좌석" value={seats.filter((seat) => seat.checked_in).length} helper="체크인 기준" accent="brand" />
-        <MetricCard label="사석화/비정상" value={seats.filter((seat) => seat.status === 'SQUATTING' || seat.status === 'ABNORMAL').length} helper="관리 필요" accent="rose" />
+        <MetricCard label="장시간 비움" value={seats.filter((seat) => seat.status === 'VACANT_LONG').length} helper="관리 필요" accent="rose" />
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
@@ -89,7 +86,7 @@ export default function ZoneSeatsPage() {
               seatId: `seat-${seat.seat_num}`,
               status: seat.status,
               location: seat.location,
-              lastUpdated: `${statusLabel(seat.status)} · ${seat.posture}`,
+              lastUpdated: `${statusLabel(seat.status)} · ${seat.checked_in ? '발권 중' : '미발권'}`,
             }))}
             selectedSeatId={selectedSeat ? `seat-${selectedSeat.seat_num}` : null}
             onSelect={(seat) => setSelectedSeatNum(Number(String(seat.seatId).replace('seat-', '')))}
@@ -100,7 +97,7 @@ export default function ZoneSeatsPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="좌석 상세 정보" subtitle="현재 자세와 압력값을 통해 헬스케어 상태를 확인합니다.">
+        <SectionCard title="좌석 상세 정보" subtitle="좌석 상태와 발권 여부만 확인합니다.">
           {selectedSeat ? (
             <div className="grid gap-5">
               <div className="rounded-2xl bg-slate-50 p-5">
@@ -117,22 +114,10 @@ export default function ZoneSeatsPage() {
                     <p className="mt-1 font-semibold text-slate-800">{selectedSeat.checked_in ? '체크인 중' : '미체크인'}</p>
                   </div>
                   <div className="rounded-2xl bg-white p-4">
-                    <p className="text-slate-500">현재 자세</p>
-                    <p className="mt-1 font-semibold text-slate-800">{selectedSeat.posture}</p>
+                    <p className="text-slate-500">마지막 갱신</p>
+                    <p className="mt-1 font-semibold text-slate-800">{formatDate(selectedSeat.updated_at)}</p>
                   </div>
                 </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <SensorCard label="왼쪽 압력" value={selectedSeat.left_pressure} />
-                <SensorCard label="오른쪽 압력" value={selectedSeat.right_pressure} />
-                <SensorCard label="등 압력" value={selectedSeat.back_pressure} />
-                <SensorCard label="마지막 갱신" value={formatDate(selectedSeat.updated_at)} />
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 p-4 text-sm text-slate-600">
-                <p className="font-semibold text-slate-800">헬스케어 해석</p>
-                <p className="mt-2">{healthcareMessage(selectedSeat.posture)}</p>
               </div>
             </div>
           ) : (
@@ -146,42 +131,14 @@ export default function ZoneSeatsPage() {
   );
 }
 
-function SensorCard({ label, value }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 p-4">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="mt-2 text-lg font-semibold text-slate-800">{value}</p>
-    </div>
-  );
-}
-
 function statusLabel(status) {
   switch (status) {
     case 'OCCUPIED':
       return '사용 중';
-    case 'SQUATTING':
-      return '사석화';
-    case 'ABNORMAL':
-      return '비정상';
+    case 'VACANT_LONG':
+      return '장시간 비움';
     default:
       return '비어있음';
-  }
-}
-
-function healthcareMessage(posture) {
-  switch (posture) {
-    case '정상':
-      return '바른 자세 유지 중입니다.';
-    case '거북목/허리 숙임':
-      return '상체가 앞으로 기울어져 있어 자세 교정이 필요합니다.';
-    case '왼쪽으로 기울어짐':
-      return '왼쪽 체중 쏠림이 감지되었습니다.';
-    case '오른쪽으로 기울어짐(다리 꼬기)':
-      return '오른쪽 체중 쏠림이 감지되었습니다.';
-    case '등받이에 기대지 않음':
-      return '등받이 압력이 낮아 허리 지지가 부족합니다.';
-    default:
-      return posture;
   }
 }
 

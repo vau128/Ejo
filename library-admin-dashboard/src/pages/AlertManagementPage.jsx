@@ -10,6 +10,7 @@ import { useApiData } from '../hooks/useApiData';
 export default function AlertManagementPage() {
   const { data, loading, error, refetch } = useApiData(getAlertManagement, []);
   const [savingRuleId, setSavingRuleId] = useState('');
+  const rules = (data?.rules ?? []).filter((rule) => rule.name !== '물품 장기 방치 알림');
 
   const toggleRule = async (rule) => {
     try {
@@ -37,7 +38,7 @@ export default function AlertManagementPage() {
       <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_1.2fr]">
         <SectionCard title="알림 규칙" subtitle="자동 알림 기준과 채널을 제어합니다.">
           <div className="grid gap-4">
-            {data.rules.map((rule) => (
+            {rules.map((rule) => (
               <div key={rule.ruleId} className="rounded-2xl border border-slate-200 p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>

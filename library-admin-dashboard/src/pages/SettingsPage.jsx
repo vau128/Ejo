@@ -22,7 +22,7 @@ const defaultSettings = {
 };
 
 const thresholdOptions = [
-  { value: 10, label: '10초 (테스트)' },
+  { value: 10, label: '10초' },
   { value: 30, label: '30분' },
   { value: 60, label: '1시간' },
   { value: 120, label: '2시간' },
@@ -307,5 +307,5 @@ function thresholdLabel(value) {
   if (option) {
     return option.label;
   }
-  return value === 10 ? '10초 (테스트)' : `${value}분`;
+  return value === 10 ? '10초' : `${value}분`;
 }

@@ -4,8 +4,6 @@ import PageHeader from '../components/PageHeader';
 import SectionCard from '../components/SectionCard';
 import { useApiData } from '../hooks/useApiData';
 
-const normalPostures = ['정상', '바른 자세 유지 중'];
-
 export default function StatisticsPage() {
   const { data, loading, error } = useApiData(getSeats, [], { intervalMs: 10000 });
 
@@ -13,39 +11,43 @@ export default function StatisticsPage() {
   if (error && !data) return <div className="app-card p-10 text-center text-sm text-rose-600">{error}</div>;
 
   const seats = data ?? [];
-  const postureRows = seats.map((seat) => ({ label: seat.location, posture: seat.posture }));
-  const normalCount = seats.filter((seat) => normalPostures.includes(seat.posture)).length;
-  const abnormalCount = seats.length - normalCount;
-  const normalRatio = seats.length ? Math.round((normalCount / seats.length) * 100) : 0;
+  const occupiedCount = seats.filter((seat) => seat.status === 'OCCUPIED').length;
+  const checkedInCount = seats.filter((seat) => seat.checked_in).length;
+  const vacantLongCount = seats.filter((seat) => seat.status === 'VACANT_LONG').length;
+  const availableCount = seats.filter((seat) => seat.status === 'AVAILABLE').length;
 
   return (
     <div>
-      <PageHeader title="통계" description="현재 자세 상태와 사석화 연관 지표를 확인합니다." />
+      <PageHeader title="통계" description="발권과 좌석 이용 상태만 확인합니다." />
 
       <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard label="정상 자세 비율" value={`${normalRatio}%`} helper="현재 좌석 기준" accent="emerald" />
-        <MetricCard label="비정상 자세 횟수" value={abnormalCount} helper="현재 감지 좌석 수" accent="rose" />
-        <MetricCard label="사석화 좌석" value={seats.filter((seat) => seat.status === 'VACANT_LONG' || seat.status === 'OBJECT_ONLY' || seat.status === 'SENSOR_DELAY').length} helper="관리자 확인 필요" accent="amber" />
+        <MetricCard label="발권 좌석" value={checkedInCount} helper="체크인 기준" accent="brand" />
+        <MetricCard label="사용 좌석" value={occupiedCount} helper="착석 감지" accent="emerald" />
+        <MetricCard label="장시간 비움" value={vacantLongCount} helper="관리자 확인 필요" accent="amber" />
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <SectionCard title="최근 감지 자세" subtitle="좌석별 최신 헬스케어 상태입니다.">
+        <SectionCard title="좌석 상태 분포" subtitle="현재 좌석 상태를 간단히 요약합니다.">
           <div className="grid gap-3">
-            {postureRows.map((item) => (
+            {[
+              { label: '사용 중', value: occupiedCount },
+              { label: '장시간 비움', value: vacantLongCount },
+              { label: '비어있음', value: availableCount },
+            ].map((item) => (
               <div key={item.label} className="rounded-2xl border border-slate-200 p-4">
                 <div className="flex items-center justify-between gap-4">
                   <p className="font-medium text-slate-800">{item.label}</p>
-                  <span className="text-sm text-slate-500">{item.posture}</span>
+                  <span className="text-sm text-slate-500">{item.value}석</span>
                 </div>
               </div>
             ))}
           </div>
         </SectionCard>
 
-        <SectionCard title="자세 분포" subtitle="정상과 비정상 상태를 단순 비율로 표시합니다.">
+        <SectionCard title="발권 대비 착석" subtitle="발권 후 실제 착석 여부를 비교합니다.">
           <div className="grid gap-4">
-            <BarRow label="정상 자세" value={normalCount} rate={normalRatio} tone="bg-emerald-500" />
-            <BarRow label="비정상 자세" value={abnormalCount} rate={100 - normalRatio} tone="bg-rose-500" />
+            <BarRow label="현재 착석" value={occupiedCount} rate={checkedInCount === 0 ? 0 : Math.round((occupiedCount / checkedInCount) * 100)} tone="bg-emerald-500" />
+            <BarRow label="미착석/장시간 비움" value={Math.max(checkedInCount - occupiedCount, 0)} rate={checkedInCount === 0 ? 0 : Math.round((Math.max(checkedInCount - occupiedCount, 0) / checkedInCount) * 100)} tone="bg-amber-500" />
           </div>
         </SectionCard>
       </div>
@@ -61,7 +63,7 @@ function BarRow({ label, value, rate, tone }) {
         <span className="font-semibold text-slate-800">{value}석</span>
       </div>
       <div className="h-3 rounded-full bg-slate-100">
-        <div className={`h-3 rounded-full ${tone}`} style={{ width: `${Math.max(rate, 4)}%` }} />
+        <div className={`h-3 rounded-full ${tone}`} style={{ width: `${Math.max(rate, value > 0 ? 4 : 0)}%` }} />
       </div>
     </div>
   );

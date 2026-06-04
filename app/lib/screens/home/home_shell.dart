@@ -42,9 +42,7 @@ class _HomeShellState extends State<HomeShell> {
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: Text(
-              '관리자 경고: ${warning.seatNumber}번 좌석 ${warning.message}',
-            ),
+            content: Text(_snackBarMessage(warning)),
             duration: const Duration(seconds: 4),
           ),
         );
@@ -105,5 +103,17 @@ class _HomeShellState extends State<HomeShell> {
         ],
       ),
     );
+  }
+
+  String _snackBarMessage(dynamic warning) {
+    final type = '${warning.warningType}'.toLowerCase();
+    final status = '${warning.status}'.toLowerCase();
+    if (type == 'lost_item' || status == 'lost_item') {
+      return '${warning.seatNumber}번 좌석에 분실물이 감지되었습니다.';
+    }
+    if (type == 'admin_warning' || status == 'admin_warning') {
+      return '관리자 경고: ${warning.seatNumber}번 좌석 ${warning.message}';
+    }
+    return '${warning.seatNumber}번 좌석 ${warning.message}';
   }
 }

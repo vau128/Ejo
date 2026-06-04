@@ -188,7 +188,7 @@ public class AppService {
         seatUsageRepository.save(new SeatUsage(seat, userEntity, now, null));
 
         seat.setCheckedIn(true);
-        seat.setStatus(seat.isOccupied() ? "OCCUPIED" : "RESERVED");
+        seat.setStatus(seat.isOccupied() ? "OCCUPIED" : "VACANT_LONG");
         seat.setVacantSince(seat.isOccupied() ? null : now);
         seat.setUpdatedAt(now);
         seatRepository.save(seat);
@@ -346,9 +346,16 @@ public class AppService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> getLostItems(String token) {
-        requireUser(token);
+        Map<String, Object> user = requireUser(token);
+        String selectedSeatId = activeSeatIdForUser(toLong(user.get("id")));
+        if (selectedSeatId == null) {
+            return mapOf("reports", List.of());
+        }
+
+        int seatNum = parseSeatNumber(selectedSeatId);
         return mapOf(
                 "reports", lostItemRepository.findAllByOrderByDetectedTimeDesc().stream()
+                        .filter(item -> Objects.equals(item.getSeatNum(), seatNum))
                         .map(this::lostItemReport)
                         .toList()
         );
@@ -465,8 +472,9 @@ public class AppService {
         seatUsageRepository.save(activeUsage);
 
         seat.setCheckedIn(false);
-        seat.setStatus(seat.isOccupied() ? "OCCUPIED" : "AVAILABLE");
-        seat.setVacantSince(seat.isOccupied() ? seat.getVacantSince() : null);
+        seat.setOccupied(false);
+        seat.setStatus("AVAILABLE");
+        seat.setVacantSince(null);
         seat.setUpdatedAt(now);
         seatRepository.save(seat);
         seatApiService.syncSeatToDashboardState(seat);
@@ -535,7 +543,7 @@ public class AppService {
             return "정상";
         }
         if (posture.contains("거북목") || posture.contains("허리")) {
-            return "거북목/허리 숙임";
+            return "허리 숙임";
         }
         if (posture.contains("왼")) {
             return "왼쪽 기울어짐";
@@ -550,7 +558,7 @@ public class AppService {
         return new LinkedHashMap<>(mapOf(
                 "pushEnabled", true,
                 "seatAlertEnabled", true,
-                "warningAlertEnabled", false
+                "warningAlertEnabled", true
         ));
     }
 

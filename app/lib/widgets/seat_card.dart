@@ -50,15 +50,6 @@ class SeatCard extends StatelessWidget {
                   color: foregroundColor.withValues(alpha: 0.9),
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                seat.posture,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: foregroundColor.withValues(alpha: 0.8),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
             ],
           ),
         ),
