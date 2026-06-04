@@ -205,16 +205,17 @@ def check_lost_items():
     
     try:
         # 1. YOLO 모델 로드
-        print("[YOLO] Loading model 'best_v4.pt'...")
-        model = YOLO('best_v4.pt')
+        print("[YOLO] Loading model 'best_v5.pt'...")
+        model = YOLO('best_v5.pt')
         
         # 2. 웹캠 사진 촬영
         print(f"[CAMERA] Connecting to RTSP stream: {CAM_URL}...")
         cap = cv2.VideoCapture(CAM_URL)
         ret, frame = cap.read()
         
-        # 카메라 화면의 가로 너비(Width) 가져오기
+        # 카메라 화면의 가로, 세로 너비 모두 가져오기
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         cap.release() 
         
         if not ret:
@@ -228,7 +229,7 @@ def check_lost_items():
         # 3-1. 객체 추출 및 좌표, 종류 임시 저장
         detected_items_with_seats = []
         
-        # 찾고자 하는 타겟 분실물 10가지 클래스 (비교를 위해 소문자로 통일)
+        # 찾고자 하는 타겟 분실물 10가지 클래스
         TARGET_CLASSES = ["backpack", "book", "card", "glasses", "laptop", "mouse", "phone", "tumbler", "bottle", "charger"]
         
         for box in results[0].boxes:
@@ -236,23 +237,28 @@ def check_lost_items():
             class_id = int(box.cls[0])
             category = results[0].names[class_id]
             
-            # 탐지된 물건이 타겟 리스트에 없으면 크롭/저장 안 하고 건너뛰기!
+            # 탐지된 물건이 타겟 리스트에 없으면 크롭/저장 안 하고 건너뛰
             if category.lower() not in TARGET_CLASSES:
                 continue
             
-            # 바운딩 박스 좌표 추출 (크롭을 위해 정수형 변환)
+            # 바운딩 박스의 중심 x, y 좌표 모두 계산
             x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
             x_center = (x1 + x2) / 2 # 물체의 중심 x 좌표
+            y_center = (y1 + y2) / 2 # 물체의 중심 y 좌표
             
-            # 화면을 4등분하여 좌석 번호 판별 (1, 2, 3, 4번 좌석)
-            if x_center < (frame_width / 4):
-                detected_seat = 1
-            elif x_center < (frame_width * 2 / 4):
-                detected_seat = 2
-            elif x_center < (frame_width * 3 / 4):
-                detected_seat = 3
+            # 화면을 십자(2x2)로 나누어 좌석 번호 맵핑
+            if x_center < (frame_width / 2):
+                # 화면의 왼쪽 절반
+                if y_center < (frame_height / 2):
+                    detected_seat = 1 # 왼쪽 위
+                else:
+                    detected_seat = 2 # 왼쪽 아래
             else:
-                detected_seat = 4
+                # 화면의 오른쪽 절반
+                if y_center < (frame_height / 2):
+                    detected_seat = 4 # 오른쪽 위
+                else:
+                    detected_seat = 3 # 오른쪽 아래
                 
             detected_items_with_seats.append({
                 "seat_num": detected_seat,
