@@ -30,7 +30,7 @@ export function AuthProvider({ children }) {
     () => ({
       token,
       user,
-      isAuthenticated: true,
+      isAuthenticated: Boolean(token),
       login,
       logout,
     }),

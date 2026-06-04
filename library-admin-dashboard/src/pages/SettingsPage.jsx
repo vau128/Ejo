@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getSettings, getSquattingThreshold, updateSettings, updateSquattingThreshold } from '../api/dashboardApi';
+import { getSettings, getSquattingThreshold, resetAllSeats, updateSettings, updateSquattingThreshold } from '../api/dashboardApi';
 import MetricCard from '../components/MetricCard';
 import PageHeader from '../components/PageHeader';
 import SectionCard from '../components/SectionCard';
@@ -22,7 +22,7 @@ const defaultSettings = {
 };
 
 const thresholdOptions = [
-  { value: 10, label: '10초 (테스트)' },
+  { value: 10, label: '10초' },
   { value: 30, label: '30분' },
   { value: 60, label: '1시간' },
   { value: 120, label: '2시간' },
@@ -35,6 +35,7 @@ export default function SettingsPage() {
   const [thresholdMinutes, setThresholdMinutes] = useState(60);
   const [saving, setSaving] = useState(false);
   const [thresholdSaving, setThresholdSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
@@ -96,6 +97,26 @@ export default function SettingsPage() {
       setMessage(err.response?.data?.message || '사석화 기준 시간을 저장하지 못했습니다.');
     } finally {
       setThresholdSaving(false);
+    }
+  };
+
+  const handleResetSeats = async () => {
+    const confirmed = window.confirm('모든 좌석 상태와 학생 발권 정보를 초기화합니다. 계속할까요?');
+    if (!confirmed) {
+      return;
+    }
+
+    setResetting(true);
+    setMessage('');
+
+    try {
+      const result = await resetAllSeats();
+      await refetch();
+      setMessage(result.message || '전체 좌석을 초기화했습니다.');
+    } catch (err) {
+      setMessage(err.response?.data?.message || '전체 좌석을 초기화하지 못했습니다.');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -185,7 +206,7 @@ export default function SettingsPage() {
           title="시스템 운영"
           subtitle="기존 운영 설정은 유지하면서 센서 반영 주기를 조정합니다."
           action={
-            <button type="submit" className="primary-button px-4 py-2 text-sm" disabled={saving}>
+            <button type="submit" className="primary-button px-4 py-2 text-sm" disabled={saving || resetting}>
               {saving ? '저장 중' : '설정 저장'}
             </button>
           }
@@ -227,6 +248,20 @@ export default function SettingsPage() {
               <p className="mt-2">운영 모드: {modeLabel(form.libraryMode)}</p>
               <p className="mt-1">사석화 기준: {thresholdLabel(thresholdMinutes)}</p>
               <p className="mt-1">센서 지연 기준: {form.sensorDelayThresholdSeconds}초</p>
+            </div>
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+              <p className="text-sm font-semibold text-rose-800">운영 긴급 조치</p>
+              <p className="mt-2 text-sm text-rose-700">
+                웹 대시보드, 학생앱, IoT 백엔드가 공유하는 현재 좌석 상태를 한 번에 초기화합니다.
+              </p>
+              <button
+                type="button"
+                className="mt-4 rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:bg-rose-300"
+                disabled={resetting || saving || thresholdSaving}
+                onClick={handleResetSeats}
+              >
+                {resetting ? '초기화 중' : '전체 좌석 초기화'}
+              </button>
             </div>
           </div>
         </SectionCard>
@@ -272,5 +307,5 @@ function thresholdLabel(value) {
   if (option) {
     return option.label;
   }
-  return value === 10 ? '10초 (테스트)' : `${value}분`;
+  return value === 10 ? '10초' : `${value}분`;
 }

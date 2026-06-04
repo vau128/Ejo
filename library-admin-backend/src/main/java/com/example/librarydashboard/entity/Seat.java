@@ -56,6 +56,9 @@ public class Seat {
     @Column(name = "posture_timestamp")
     private LocalDateTime postureTimestamp;
 
+    @Column(name = "vacant_since")
+    private LocalDateTime vacantSince;
+
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
@@ -75,6 +78,7 @@ public class Seat {
             Integer rightPressure,
             Integer backPressure,
             LocalDateTime postureTimestamp,
+            LocalDateTime vacantSince,
             LocalDateTime updatedAt
     ) {
         this.seatNum = seatNum;
@@ -89,6 +93,7 @@ public class Seat {
         this.rightPressure = rightPressure;
         this.backPressure = backPressure;
         this.postureTimestamp = postureTimestamp;
+        this.vacantSince = vacantSince;
         this.updatedAt = updatedAt;
     }
 
@@ -206,5 +211,13 @@ public class Seat {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public LocalDateTime getVacantSince() {
+        return vacantSince;
+    }
+
+    public void setVacantSince(LocalDateTime vacantSince) {
+        this.vacantSince = vacantSince;
     }
 }

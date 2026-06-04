@@ -37,4 +37,47 @@ public class SeatUsage {
 
     protected SeatUsage() {
     }
+
+    public SeatUsage(Seat seat, User user, LocalDateTime checkInTime, LocalDateTime checkOutTime) {
+        this.seat = seat;
+        this.user = user;
+        this.checkInTime = checkInTime;
+        this.checkOutTime = checkOutTime;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public Seat getSeat() {
+        return seat;
+    }
+
+    public void setSeat(Seat seat) {
+        this.seat = seat;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
+    public LocalDateTime getCheckInTime() {
+        return checkInTime;
+    }
+
+    public void setCheckInTime(LocalDateTime checkInTime) {
+        this.checkInTime = checkInTime;
+    }
+
+    public LocalDateTime getCheckOutTime() {
+        return checkOutTime;
+    }
+
+    public void setCheckOutTime(LocalDateTime checkOutTime) {
+        this.checkOutTime = checkOutTime;
+    }
 }

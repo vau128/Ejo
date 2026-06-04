@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../models/posture_stats.dart';
 import '../../models/seat.dart';
 import '../../services/app_state.dart';
 import '../../widgets/empty_state_view.dart';
+import 'posture_stats_screen.dart';
 
 class MySeatScreen extends StatelessWidget {
   const MySeatScreen({super.key, required this.appState});
@@ -11,17 +13,27 @@ class MySeatScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedSeat = appState.selectedSeat;
+    final selectedSeat = appState.mySeat;
+    final postureStats = appState.postureStats;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('나의 자리')),
+      appBar: AppBar(
+        title: const Text('마이페이지'),
+        actions: [
+          IconButton(
+            onPressed: () => _refresh(context),
+            icon: const Icon(Icons.refresh),
+            tooltip: '새로고침',
+          ),
+        ],
+      ),
       body: selectedSeat == null
           ? const Padding(
               padding: EdgeInsets.all(16),
               child: EmptyStateView(
                 icon: Icons.event_seat_outlined,
-                title: '선택된 좌석이 없습니다',
-                message: '좌석 선택 화면에서 1번부터 4번 좌석 중 하나를 선택해주세요.',
+                title: '현재 발권한 좌석이 없습니다',
+                message: '좌석 선택 화면에서 발권한 뒤 본인 좌석 상태와 자세를 확인할 수 있습니다.',
               ),
             )
           : ListView(
@@ -35,12 +47,25 @@ class MySeatScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 _HealthcareSummaryCard(seat: selectedSeat),
                 const SizedBox(height: 16),
+                _StatsSummaryCard(stats: postureStats),
+                const SizedBox(height: 16),
                 _PressurePanel(seat: selectedSeat),
                 const SizedBox(height: 16),
                 _GuideCard(seat: selectedSeat),
               ],
             ),
     );
+  }
+
+  Future<void> _refresh(BuildContext context) async {
+    final message = await appState.refreshSeatStatuses();
+    if (!context.mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message ?? '마이페이지를 새로고침했습니다.')));
   }
 }
 
@@ -63,53 +88,17 @@ class _SeatSummaryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('현재 이용 좌석', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE3F2FD),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Icon(Icons.event_seat, color: Color(0xFF1565C0)),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${seat.number}번 좌석',
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        seat.checkedIn
-                            ? '체크인 상태로 이용 중입니다.'
-                            : '아직 체크인되지 않은 좌석입니다.',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: _InfoTile(label: '이용자', value: studentName),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _InfoTile(label: '학번', value: studentId),
-                ),
-              ],
-            ),
+            Text('나의 좌석', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            Text('$studentName · $studentId'),
+            const SizedBox(height: 8),
+            Text('${seat.number}번 좌석 (${seat.location})'),
+            const SizedBox(height: 8),
+            Text(seat.checkedIn ? '발권 상태: 사용 중' : '발권 상태: 미사용'),
+            if (seat.selectedAt != null) ...[
+              const SizedBox(height: 8),
+              Text('발권 시각: ${seat.selectedAt}'),
+            ],
           ],
         ),
       ),
@@ -124,8 +113,39 @@ class _HealthcareSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = _healthStatus(seat);
-    final statusColor = _statusColor(status);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('현재 자세 상태', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            Text(
+              seat.posture,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 8),
+            Text(seat.occupied ? '실제 착석 감지됨' : '현재는 미착석 상태입니다.'),
+            if (seat.postureTimestamp != null) ...[
+              const SizedBox(height: 8),
+              Text('최근 센서 시각: ${seat.postureTimestamp}'),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatsSummaryCard extends StatelessWidget {
+  const _StatsSummaryCard({required this.stats});
+
+  final PostureStats? stats;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = stats;
 
     return Card(
       child: Padding(
@@ -133,28 +153,32 @@ class _HealthcareSummaryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('학생 헬스케어', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                status,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: statusColor,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+            Text('자세 통계', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            Text(
+              summary == null
+                  ? '자세 통계를 불러오는 중입니다.'
+                  : '최근 1주일 측정 ${summary.totalSamples}회',
+            ),
+            const SizedBox(height: 8),
+            Text(
+              summary == null
+                  ? '앱 새로고침 후 다시 확인해주세요.'
+                  : '가장 많이 나온 자세: ${summary.mostFrequentPosture}',
             ),
             const SizedBox(height: 16),
-            _DetailRow(label: '현재 자세', value: seat.posture),
-            _DetailRow(label: '상태 메시지', value: _postureMessage(seat.posture)),
-            _DetailRow(
-              label: '헬스케어 해석',
-              value: _healthcareInterpretation(seat),
+            FilledButton.tonalIcon(
+              onPressed: summary == null
+                  ? null
+                  : () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => PostureStatsScreen(stats: summary),
+                        ),
+                      );
+                    },
+              icon: const Icon(Icons.insights_outlined),
+              label: const Text('자세 통계 페이지 보기'),
             ),
           ],
         ),
@@ -212,6 +236,36 @@ class _PressurePanel extends StatelessWidget {
   }
 }
 
+class _PressureCard extends StatelessWidget {
+  const _PressureCard({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final int value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Text(label),
+          const SizedBox(height: 8),
+          Text('$value', style: Theme.of(context).textTheme.headlineSmall),
+        ],
+      ),
+    );
+  }
+}
+
 class _GuideCard extends StatelessWidget {
   const _GuideCard({required this.seat});
 
@@ -233,7 +287,7 @@ class _GuideCard extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             Text(
-              '통합 테스트 중에는 압력 센서 값이 들어오면 이 화면이 실시간 자세 상태로 갱신됩니다.',
+              '이 화면은 본인 좌석 데이터만 표시합니다.',
               style: Theme.of(
                 context,
               ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade700),
@@ -243,173 +297,17 @@ class _GuideCard extends StatelessWidget {
       ),
     );
   }
-}
 
-class _InfoTile extends StatelessWidget {
-  const _InfoTile({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FC),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
-          ),
-          const SizedBox(height: 6),
-          Text(value, style: Theme.of(context).textTheme.titleMedium),
-        ],
-      ),
-    );
-  }
-}
-
-class _PressureCard extends StatelessWidget {
-  const _PressureCard({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  final String label;
-  final int value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: color),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '$value',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 88,
-            child: Text(
-              label,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
-            ),
-          ),
-          Expanded(child: Text(value)),
-        ],
-      ),
-    );
-  }
-}
-
-String _healthStatus(Seat seat) {
-  if (seat.posture == '정상') {
-    return '바른 자세 유지 중';
-  }
-  if (seat.backPressure == 0 &&
-      (seat.leftPressure > 0 || seat.rightPressure > 0)) {
-    return '허리 지지 부족';
-  }
-  return '자세 교정 필요';
-}
-
-Color _statusColor(String status) {
-  switch (status) {
-    case '바른 자세 유지 중':
-      return const Color(0xFF2E7D32);
-    case '허리 지지 부족':
-      return const Color(0xFFEF6C00);
-    default:
-      return const Color(0xFFC62828);
-  }
-}
-
-String _postureMessage(String posture) {
-  switch (posture) {
-    case '정상':
-      return '바른 자세를 유지하고 있습니다.';
-    case '거북목/허리 숙임':
-      return '상체가 앞으로 숙여져 있습니다.';
-    case '왼쪽으로 기울어짐':
-      return '왼쪽으로 체중이 쏠려 있습니다.';
-    case '오른쪽으로 기울어짐(다리 꼬기)':
-      return '오른쪽으로 체중이 쏠려 있습니다.';
-    case '등받이에 기대지 않음':
-      return '등받이 지지가 부족합니다.';
-    default:
-      return posture;
-  }
-}
-
-String _healthcareInterpretation(Seat seat) {
-  if (seat.posture == '정상') {
-    return '현재 자세가 안정적입니다. 그대로 유지하면 됩니다.';
-  }
-  if (seat.backPressure == 0 &&
-      (seat.leftPressure > 0 || seat.rightPressure > 0)) {
-    return '엉덩이 압력은 감지되지만 등받이 지지가 없습니다. 허리를 기대는 자세가 필요합니다.';
-  }
-  return '좌우 압력 불균형이 감지되었습니다. 체중을 중앙으로 맞춰 앉는 것이 좋습니다.';
-}
-
-String _actionGuide(String posture) {
-  switch (posture) {
-    case '정상':
-      return '바른 자세 유지 중입니다.';
-    case '거북목/허리 숙임':
-      return '고개를 들고 허리를 펴서 화면과 눈높이를 맞춰주세요.';
-    case '왼쪽으로 기울어짐':
-      return '왼쪽으로 기울어진 자세를 바로잡고 중심을 맞춰주세요.';
-    case '오른쪽으로 기울어짐(다리 꼬기)':
-      return '다리 꼬기를 풀고 양발을 바닥에 안정적으로 두세요.';
-    case '등받이에 기대지 않음':
-      return '등을 등받이에 기대고 허리를 지지해주세요.';
-    default:
-      return posture;
+  String _actionGuide(String posture) {
+    if (posture.contains('허리') || posture.contains('숙임')) {
+      return '모니터를 눈높이에 맞추고 허리를 세워 앉아주세요.';
+    }
+    if (posture.contains('왼')) {
+      return '왼쪽으로 기울어져 있습니다. 엉덩이와 어깨 중심을 맞춰주세요.';
+    }
+    if (posture.contains('오른')) {
+      return '오른쪽으로 기울어져 있습니다. 의자 중앙에 앉아 균형을 맞춰주세요.';
+    }
+    return '현재 자세가 안정적입니다. 같은 자세가 오래 지속되지 않게 중간중간 스트레칭해주세요.';
   }
 }

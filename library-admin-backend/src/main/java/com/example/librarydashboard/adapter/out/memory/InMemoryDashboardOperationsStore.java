@@ -26,7 +26,6 @@ public class InMemoryDashboardOperationsStore implements DashboardOperationsStor
         seedAlertRules();
         seedLostItems();
         seedDevices();
-        seedSensorLogs();
         seedSettings();
     }
 
@@ -53,6 +52,11 @@ public class InMemoryDashboardOperationsStore implements DashboardOperationsStor
     @Override
     public void prependAlertHistory(Map<String, Object> history) {
         alertHistory.add(0, new LinkedHashMap<>(history));
+    }
+
+    @Override
+    public void clearAlertHistory() {
+        alertHistory.clear();
     }
 
     @Override
@@ -86,6 +90,11 @@ public class InMemoryDashboardOperationsStore implements DashboardOperationsStor
     }
 
     @Override
+    public void clearLostItems() {
+        lostItems.clear();
+    }
+
+    @Override
     public List<Map<String, Object>> findDevices() {
         return devices.stream().map(item -> (Map<String, Object>) new LinkedHashMap<>(item)).toList();
     }
@@ -98,6 +107,11 @@ public class InMemoryDashboardOperationsStore implements DashboardOperationsStor
     @Override
     public void prependSensorLog(Map<String, Object> log) {
         sensorLogs.add(0, new LinkedHashMap<>(log));
+    }
+
+    @Override
+    public void clearSensorLogs() {
+        sensorLogs.clear();
     }
 
     @Override
@@ -181,7 +195,6 @@ public class InMemoryDashboardOperationsStore implements DashboardOperationsStor
     }
 
     private void seedAlertRules() {
-        alertRules.add(mapOf("ruleId", "RULE-01", "name", "물품 장기 방치 알림", "condition", "압력 미감지 + 물체 감지", "thresholdMinutes", 10, "channel", "앱 푸시", "enabled", true, "targetType", "물품 방치"));
         alertRules.add(mapOf("ruleId", "RULE-02", "name", "장시간 비움 알림", "condition", "압력 0 + 사람 미감지 지속", "thresholdMinutes", 15, "channel", "앱 푸시", "enabled", true, "targetType", "장시간 비움"));
         alertRules.add(mapOf("ruleId", "RULE-03", "name", "센서 지연 점검", "condition", "게이트웨이 지연 1000ms 초과", "thresholdMinutes", 5, "channel", "관리자 처리", "enabled", true, "targetType", "센서 지연"));
         alertRules.add(mapOf("ruleId", "RULE-04", "name", "심야 자동 알림", "condition", "폐관 전 미반납 좌석", "thresholdMinutes", 5, "channel", "앱 푸시", "enabled", false, "targetType", "폐관 관리"));
@@ -198,14 +211,6 @@ public class InMemoryDashboardOperationsStore implements DashboardOperationsStor
         devices.add(mapOf("deviceId", "cam-01", "type", "Camera", "zone", "1구역", "status", "정상", "lastSeen", "17:22", "latencyMs", 64, "notes", "천장형 카메라"));
         devices.add(mapOf("deviceId", "cam-02", "type", "Camera", "zone", "2구역", "status", "정상", "lastSeen", "17:22", "latencyMs", 70, "notes", "천장형 카메라"));
         devices.add(mapOf("deviceId", "cam-03", "type", "Camera", "zone", "3구역", "status", "지연", "lastSeen", "17:20", "latencyMs", 1420, "notes", "프레임 재전송 발생"));
-    }
-
-    private void seedSensorLogs() {
-        sensorLogs.add(mapOf("id", "LOG-101", "timestamp", "2026.03.27 17:21", "deviceId", "edge-rpi-03", "seatId", "3A-07", "eventType", "VACANT_LONG", "value", "0.00", "message", "장시간 비움 상태 지속", "status", "지연"));
-        sensorLogs.add(mapOf("id", "LOG-102", "timestamp", "2026.03.27 17:19", "deviceId", "edge-rpi-03", "seatId", "3C-02", "eventType", "OBJECT_ONLY", "value", "0.04", "message", "물품 방치 의심 상태 재감지", "status", "정상"));
-        sensorLogs.add(mapOf("id", "LOG-103", "timestamp", "2026.03.27 17:17", "deviceId", "cam-03", "seatId", "3B-05", "eventType", "FRAME_DELAY", "value", "1450ms", "message", "카메라 프레임 수신 지연", "status", "지연"));
-        sensorLogs.add(mapOf("id", "LOG-104", "timestamp", "2026.03.27 17:15", "deviceId", "edge-rpi-02", "seatId", "2C-11", "eventType", "OCCUPIED", "value", "0.82", "message", "정상 착석 감지", "status", "정상"));
-        sensorLogs.add(mapOf("id", "LOG-105", "timestamp", "2026.03.27 17:12", "deviceId", "edge-rpi-01", "seatId", "1A-04", "eventType", "AVAILABLE", "value", "0.01", "message", "좌석 반납 완료", "status", "정상"));
     }
 
     private void seedSettings() {

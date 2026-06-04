@@ -4,7 +4,8 @@
 // [1. 네트워크 설정]
 const char* ssid = "yerin";
 const char* password = "20040821";
-const char* mqtt_server = "172.20.10.9"; 
+const char* mqtt_server = "0.tcp.jp.ngrok.io";
+const int mqtt_port = 11606;
 
 // [2. 좌석 및 센서 핀 설정]
 #define SEAT_NUM 2
@@ -86,14 +87,14 @@ void setup() {
     } 
     // 2) 앞/뒤 밸런스 붕괴 (등받이 안 닿음)
     else if (back_val < 500) {
-        posture = "거북목/허리 숙임";
+        posture = "허리 숙임";
     }
 
     Serial.println("Detected Posture: " + posture);
 
     // 와이파이 & MQTT 연결
     setup_wifi();
-    client.setServer(mqtt_server, 1883);
+    client.setServer(mqtt_server, mqtt_port);
     if (!client.connected()) reconnect();
 
     // 서버로 보낼 데이터를 JSON 형태로 예쁘게 포장
@@ -129,7 +130,7 @@ void setup() {
        Serial.println("User left the seat! Sending empty status...");
        
        setup_wifi();
-       client.setServer(mqtt_server, 1883);
+       client.setServer(mqtt_server, mqtt_port);
        if (!client.connected()) reconnect();
 
        String topic = "seat/status/" + String(SEAT_NUM);

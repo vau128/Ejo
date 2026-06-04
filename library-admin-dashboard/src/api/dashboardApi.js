@@ -20,6 +20,11 @@ export async function releaseSeat(seatId) {
   return data;
 }
 
+export async function forceCheckout(seatId) {
+  const { data } = await client.post('/dashboard/actions/force-checkout', { seatId });
+  return data;
+}
+
 export async function resolveIssue(seatId) {
   const { data } = await client.post('/dashboard/actions/resolve', { seatId });
   return data;
@@ -42,6 +47,11 @@ export async function updateAlertRule(ruleId, enabled) {
 
 export async function getStatistics() {
   const { data } = await client.get('/dashboard/stats');
+  return data;
+}
+
+export async function getHealthcareStatistics() {
+  const { data } = await client.get('/dashboard/healthcare/stats');
   return data;
 }
 
@@ -123,5 +133,10 @@ export async function triggerLostItemScan() {
   const requestBody = { command: 'detect' };
   console.log('triggerLostItemScan requestBody', requestBody);
   const { data } = await client.post('/admin/lost-item-scan', requestBody);
+  return data;
+}
+
+export async function resetAllSeats() {
+  const { data } = await client.post('/testing/reset-demo-state');
   return data;
 }

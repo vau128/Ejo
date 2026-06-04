@@ -25,13 +25,28 @@ export default function OverviewPage() {
     <div>
       <PageHeader title="Overview" description="전체 현황과 주요 운영 항목을 한 화면에서 확인합니다." />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <MetricCard label="총 좌석 수" value={summary.totalSeats} helper="통합 테스트 기준 4석" />
-        <MetricCard label="사용 좌석 수" value={summary.occupiedSeats} helper="실시간 점유" accent="emerald" />
-        <MetricCard label="사용 가능" value={summary.availableSeats} helper="즉시 이용 가능" />
-        <MetricCard label="비정상 좌석" value={summary.abnormalSeats} helper="확인 필요" accent="rose" />
-        <MetricCard label="금일 알림" value={summary.alertsToday} helper="발송 기준" accent="amber" />
-        <MetricCard label="보관 중 분실물" value={summary.openLostItems} helper="관리실 기준" accent="violet" />
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <MetricCard compact label="총 좌석 수" value={summary.totalSeats} helper="운영 기준 4석" />
+        <MetricCard compact label="사용 좌석 수" value={summary.occupiedSeats} helper="실시간 점유" accent="emerald" />
+        <MetricCard compact label="사용 가능" value={summary.availableSeats} helper="즉시 이용 가능" />
+        <MetricCard compact label="비정상 좌석" value={summary.abnormalSeats} helper="확인 필요" accent="rose" />
+        <MetricCard compact label="금일 알림" value={summary.alertsToday} helper="발송 기준" accent="amber" />
+        <MetricCard compact label="보관 중 분실물" value={summary.openLostItems} helper="관리실 기준" accent="violet" />
+      </div>
+
+      <div className="mt-6">
+        <SectionCard
+          title="좌석 현황"
+          subtitle="좌석 상태를 큰 카드로 정리해 한 번에 확인할 수 있습니다."
+          action={<Link to="/zone-seats" className="secondary-button">좌석 상세 보기</Link>}
+        >
+          <div className="mb-5 flex flex-wrap gap-3 text-sm text-slate-500">
+            <span className="rounded-full bg-slate-100 px-3 py-1">총 {data.zonePreview.totalSeats}석</span>
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">사용 중 {data.zonePreview.occupiedSeats}</span>
+            <span className="rounded-full bg-rose-50 px-3 py-1 text-rose-700">비정상 {data.zonePreview.abnormalSeats}</span>
+          </div>
+          <SeatGrid seats={data.zonePreview.seats} selectedSeatId={null} onSelect={() => {}} />
+        </SectionCard>
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.3fr_1fr]">
@@ -79,20 +94,7 @@ export default function OverviewPage() {
         </SectionCard>
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_1fr]">
-        <SectionCard
-          title="좌석 현황"
-          subtitle="4개 좌석의 현재 상태를 요약 형태로 확인합니다."
-          action={<Link to="/zone-seats" className="secondary-button">좌석 상세 보기</Link>}
-        >
-          <div className="mb-5 flex flex-wrap gap-3 text-sm text-slate-500">
-            <span className="rounded-full bg-slate-100 px-3 py-1">총 {data.zonePreview.totalSeats}석</span>
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">사용 중 {data.zonePreview.occupiedSeats}</span>
-            <span className="rounded-full bg-rose-50 px-3 py-1 text-rose-700">비정상 {data.zonePreview.abnormalSeats}</span>
-          </div>
-          <SeatGrid seats={data.zonePreview.seats} selectedSeatId={null} onSelect={() => {}} />
-        </SectionCard>
-
+      <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <div className="grid gap-6">
           <SectionCard
             title="분실물 관리보드"
@@ -111,7 +113,9 @@ export default function OverviewPage() {
               ))}
             </div>
           </SectionCard>
+        </div>
 
+        <div className="grid gap-6">
           <SectionCard
             title="시스템 상태 모니터링"
             subtitle="센서, 카메라, 지연 상태를 확인합니다."

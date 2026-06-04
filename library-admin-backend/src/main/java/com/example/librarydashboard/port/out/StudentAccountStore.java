@@ -13,5 +13,9 @@ public interface StudentAccountStore {
 
     Optional<Map<String, Object>> findByToken(String token);
 
+    Optional<Map<String, Object>> findBySelectedSeatId(String seatId);
+
     void saveSessionToken(String token, String userId);
+
+    void resetForTesting();
 }

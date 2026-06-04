@@ -65,4 +65,36 @@ public class PostureLog {
             createdAt = LocalDateTime.now();
         }
     }
+
+    public Long getId() {
+        return id;
+    }
+
+    public Integer getSeatNum() {
+        return seatNum;
+    }
+
+    public String getPosture() {
+        return posture;
+    }
+
+    public Integer getLeftPressure() {
+        return leftPressure;
+    }
+
+    public Integer getRightPressure() {
+        return rightPressure;
+    }
+
+    public Integer getBackPressure() {
+        return backPressure;
+    }
+
+    public LocalDateTime getSensorTimestamp() {
+        return sensorTimestamp;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
 }

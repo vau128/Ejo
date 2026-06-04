@@ -69,6 +69,14 @@ public class AppController {
         return appService.getMySeat(appService.resolveToken(authorization, studentToken));
     }
 
+    @GetMapping("/me/posture-stats")
+    public Map<String, Object> postureStats(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestHeader(value = "X-Student-Token", required = false) String studentToken
+    ) {
+        return appService.getMyPostureStats(appService.resolveToken(authorization, studentToken));
+    }
+
     @GetMapping("/me/warnings")
     public Map<String, Object> warnings(
             @RequestHeader(value = "Authorization", required = false) String authorization,

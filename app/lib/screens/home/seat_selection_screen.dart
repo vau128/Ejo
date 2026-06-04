@@ -87,17 +87,19 @@ class SeatSelectionScreen extends StatelessWidget {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message ?? '상태가 새로고침되었습니다.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message ?? '상태가 새로고침되었습니다.')));
   }
 
   Future<void> _handleSeatTap(BuildContext context, Seat seat) async {
-    final message = await appState.toggleSeatSelection(seat.id);
+    final message = await appState.toggleSeatSelection(seat.number.toString());
     if (!context.mounted || message == null) {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }

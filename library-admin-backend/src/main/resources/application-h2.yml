@@ -1,0 +1,40 @@
+spring:
+  config:
+    activate:
+      on-profile: h2
+  datasource:
+    url: jdbc:h2:mem:library_db;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+
+app:
+  datasource:
+    enabled: false
+  iot:
+    enabled: false
+    base-url: http://iot-local
+    api-key: local-iot-key
+    request-timeout-ms: 3000
+    heartbeat-threshold-seconds: 30
+    mqtt:
+      enabled: false
+  aws:
+    enabled: false
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

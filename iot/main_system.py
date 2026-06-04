@@ -3,7 +3,12 @@ import boto3
 import os
 import requests # API 통신을 위한 라이브러리
 import json # JSON 데이터를 파싱하기 위한 라이브러리
+import atexit
+import signal
+import sys
+import threading
 from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from ultralytics import YOLO
 import paho.mqtt.client as mqtt
 from threading import Timer
@@ -19,17 +24,25 @@ load_dotenv()
 AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY", "")
 AWS_SECRET_KEY = os.getenv("AWS_SECRET_KEY", "")
 AWS_REGION = "ap-northeast-2" # 예: 서울 리전
-BUCKET_NAME = "new-ejo-bucket"
+BUCKET_NAME = os.getenv("AWS_S3_BUCKET", "new-ejo-bucket")
 
 # Tapo C200 IP 카메라 RTSP 주소
 CAM_URL = "rtsp://abcd1234:00001234@172.20.10.10:554/stream1"
 
 # 백엔드 실제 API 주소 반영
-BASE_URL = "http://13.209.33.104:8080"
+BASE_URL = os.getenv("IOT_BACKEND_BASE_URL", "http://13.209.33.104:8080")
 FASTAPI_SQUATTING_URL = f"{BASE_URL}/api/seat/squatting"
 FASTAPI_LOST_ITEM_URL = f"{BASE_URL}/api/seat/lost-item"
 FASTAPI_POSTURE_URL = f"{BASE_URL}/api/seat/posture"
+FASTAPI_STATUS_URL = f"{BASE_URL}/api/seat/status"
 FASTAPI_CHECKIN_STATUS_URL = f"{BASE_URL}/api/seat/check-in-status"
+FASTAPI_RESET_DEMO_URL = f"{BASE_URL}/api/testing/reset-demo-state"
+MQTT_BROKER_HOST = os.getenv("MQTT_BROKER", "localhost")
+MQTT_BROKER_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_USERNAME = os.getenv("MQTT_USERNAME", "")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
+IOT_API_KEY = os.getenv("IOT_API_KEY", "local-iot-key")
+IOT_ADMIN_PORT = int(os.getenv("IOT_ADMIN_PORT", "8090"))
 
 # S3 클라이언트 초기화
 s3_client = boto3.client(
@@ -40,13 +53,30 @@ s3_client = boto3.client(
 )
 
 squatting_timers = {}
+shutdown_started = False
 # ⚠️ 현재 테스트를 위해 10초로 변경 (관리자가 변경하면 이 값이 업데이트 됨)
 SQUATTING_LIMIT = 10  
 
+
+def fetch_checkin_status(seat_num):
+    try:
+        response = requests.get(f"{FASTAPI_CHECKIN_STATUS_URL}/{seat_num}", timeout=2)
+        if response.status_code == 200:
+            return response.json().get("is_checked_in", False)
+        print(f"[API] Check-in status request failed for Seat {seat_num}. HTTP Code: {response.status_code}")
+    except requests.exceptions.RequestException as exc:
+        print(f"[API] Check-in status request failed for Seat {seat_num}: {exc}")
+    return False
+  
 # ----------------------------------------------------
 # [2. 사석화 판정 로직]
 # ----------------------------------------------------
 def trigger_squatting(seat_num):
+    if not fetch_checkin_status(seat_num):
+        print(f"[INFO] Seat {seat_num} is no longer checked in. Skipping squatting mark.")
+        squatting_timers.pop(seat_num, None)
+        return
+
     print(f"[WARNING] Seat {seat_num} empty for timer limit! Marked as squatting.")
     try:
         payload = {"seat_num": seat_num, "status": "squatting"}
@@ -57,6 +87,115 @@ def trigger_squatting(seat_num):
             print(f"[ERROR] Failed to send status. HTTP Code: {response.status_code}")
     except Exception as e:
         print(f"[ERROR] Cannot connect to main server: {e}")
+
+
+def send_empty_status(seat_num):
+    current_time_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    payload = {
+        "seat_num": seat_num,
+        "pressure": 0,
+        "timestamp": current_time_iso
+    }
+    try:
+        response = requests.post(FASTAPI_STATUS_URL, json=payload)
+        if response.status_code == 200:
+            print(f"[SUCCESS] Empty status sent! (Seat {seat_num})")
+        else:
+            print(f"[ERROR] Empty status API failed. HTTP Code: {response.status_code}, Response: {response.text}")
+    except Exception as e:
+        print(f"[ERROR] Failed to connect to server for empty status API: {e}")
+
+
+def cancel_all_squatting_timers():
+    for seat_num, timer in list(squatting_timers.items()):
+        print(f"[TIMER] Canceling squatting timer for seat {seat_num}.")
+        timer.cancel()
+        del squatting_timers[seat_num]
+
+
+def reset_demo_state(reason):
+    print(f"[TEST] Resetting demo state ({reason})...")
+    cancel_all_squatting_timers()
+    try:
+        response = requests.post(FASTAPI_RESET_DEMO_URL, timeout=3)
+        if response.status_code == 200:
+            print("[SUCCESS] Demo state reset completed.")
+        else:
+            print(f"[ERROR] Demo state reset failed. HTTP Code: {response.status_code}, Response: {response.text}")
+    except Exception as e:
+        print(f"[ERROR] Failed to reset demo state: {e}")
+
+
+def handle_shutdown(signum=None, frame=None):
+    global shutdown_started
+
+    if shutdown_started:
+        return
+    shutdown_started = True
+
+    signal_name = "process exit" if signum is None else signal.Signals(signum).name
+    reset_demo_state(f"iot shutdown: {signal_name}")
+
+    if signum is not None:
+        sys.exit(0)
+
+
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
+        print(f"[MQTT] Connected to broker {MQTT_BROKER_HOST}:{MQTT_BROKER_PORT}")
+        client.subscribe("seat/status/#")
+        client.subscribe("admin/trigger_lost_item")
+        client.subscribe("admin/config/squatting_time")
+        print("[MQTT] Subscribed to seat/status/#, admin/trigger_lost_item, admin/config/squatting_time")
+    else:
+        print(f"[MQTT] Connection failed with result code {rc}")
+
+
+class AdminTriggerHandler(BaseHTTPRequestHandler):
+
+    def do_POST(self):
+        if self.path != "/admin/lost-item-scan":
+            self.send_error(404)
+            return
+
+        provided_api_key = self.headers.get("X-IoT-Api-Key", "")
+        if IOT_API_KEY and provided_api_key != IOT_API_KEY:
+            self.send_error(403)
+            return
+
+        content_length = int(self.headers.get("Content-Length", "0"))
+        raw_body = self.rfile.read(content_length) if content_length > 0 else b"{}"
+
+        try:
+            payload = json.loads(raw_body.decode("utf-8"))
+        except json.JSONDecodeError:
+            self.send_error(400, "Invalid JSON payload")
+            return
+
+        command = payload.get("command", "detect")
+        if command != "detect":
+            self.send_error(400, "Unsupported command")
+            return
+
+        threading.Thread(target=check_lost_items, daemon=True).start()
+        response_body = json.dumps({"message": "lost item scan accepted"}).encode("utf-8")
+
+        self.send_response(202)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(response_body)))
+        self.end_headers()
+        self.wfile.write(response_body)
+
+    def log_message(self, format, *args):
+        print(f"[IOT-HTTP] {self.address_string()} - {format % args}")
+
+
+def start_admin_trigger_server():
+    server = ThreadingHTTPServer(("0.0.0.0", IOT_ADMIN_PORT), AdminTriggerHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    print(f"[IOT-HTTP] Admin trigger server listening on 0.0.0.0:{IOT_ADMIN_PORT}")
+    return server
 
 # ----------------------------------------------------
 # [3. 분실물 탐지 및 개별 크롭(Crop) 업로드 로직]
@@ -164,19 +303,18 @@ def check_lost_items():
                 local_filename, BUCKET_NAME, s3_key,
                 ExtraArgs={'ContentType': 'image/jpeg'}
             )
-            s3_url = f"https://{BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
             
-            # 4-4. 백엔드로 개별 S3 URL 전송
+            # 4-4. 백엔드로 개별 S3 key 전송
             lost_item_payload = {
                 "seat_num": item["seat_num"], 
-                "image_url": s3_url,         
+                "image_url": s3_key,
                 "category": item["category"]  
             }
             
             api_response = requests.post(FASTAPI_LOST_ITEM_URL, json=lost_item_payload)
             
             if api_response.status_code == 200:
-                 print(f"[SUCCESS] Sent S3 URL for Seat {item['seat_num']} -> {item['category']}")
+                 print(f"[SUCCESS] Sent S3 key for Seat {item['seat_num']} -> {item['category']}")
             else:
                  print(f"[ERROR] Failed to send {item['category']}. HTTP Code: {api_response.status_code}")
         
@@ -208,17 +346,10 @@ def on_message(client, userdata, msg):
             # [상태 B] 사람이 일어난 경우 (status: 0 이 넘어옴)
             if "status" in data and data["status"] == 0:
                 print(f"[Seat {seat_num}] Empty seat detected. Checking app status...")
+                send_empty_status(seat_num)
                 
                 # 백엔드에 현재 발권(체크인) 상태인지 물어보는 검증 로직
-                is_checked_in = True # 기본값 (API 통신 실패 시 테스트를 위해 True로 둠)
-                try:
-                    url = f"{FASTAPI_CHECKIN_STATUS_URL}/{seat_num}"
-                    # timeout=2: 서버가 꺼져있을 때 2초만 기다리고 바로 다음 코드로 넘어가게 함
-                    response = requests.get(url, timeout=2)
-                    if response.status_code == 200:
-                        is_checked_in = response.json().get("is_checked_in", True)
-                except requests.exceptions.RequestException:
-                    print(f"[API] (Mock API) Server unreachable. Assuming Seat {seat_num} is checked in.")
+                is_checked_in = fetch_checkin_status(seat_num)
                 
                 # 체크인 상태일 때만 사석화 타이머 가동
                 if is_checked_in:
@@ -282,14 +413,15 @@ def on_message(client, userdata, msg):
     # [동적 타이머 설정] 관리자가 사석화 기준 시간을 변경했을 때
     elif topic == "admin/config/squatting_time":
         try:
-            # 관리자가 앱에서 보낸 JSON (예: {"limit_minutes": 60})
+            # 관리자가 앱에서 보낸 JSON (예: {"limit_minutes": 60} 또는 {"limit_seconds": 10})
             config_data = json.loads(payload_str)
-            new_minutes = config_data.get("limit_minutes", 45) # 기본값은 45분
-            
-            # 분(Minutes)을 초(Seconds)로 변환하여 글로벌 변수 업데이트
-            SQUATTING_LIMIT = new_minutes * 60 
-            
-            print(f"[CONFIG] 🛠️ Admin updated squatting limit to {new_minutes} minutes ({SQUATTING_LIMIT} seconds)!")
+            if "limit_seconds" in config_data:
+                SQUATTING_LIMIT = int(config_data["limit_seconds"])
+                print(f"[CONFIG] 🛠️ Admin updated squatting limit to {SQUATTING_LIMIT} seconds (test mode)!")
+            else:
+                new_minutes = config_data.get("limit_minutes", 45) # 기본값은 45분
+                SQUATTING_LIMIT = new_minutes * 60
+                print(f"[CONFIG] 🛠️ Admin updated squatting limit to {new_minutes} minutes ({SQUATTING_LIMIT} seconds)!")
         except Exception as e:
             print(f"[ERROR] Failed to update squatting time: {e}")
 
@@ -297,16 +429,20 @@ def on_message(client, userdata, msg):
 # [5. 메인 실행]
 # ----------------------------------------------------
 if __name__ == "__main__":
+    atexit.register(handle_shutdown)
+    signal.signal(signal.SIGINT, handle_shutdown)
+    signal.signal(signal.SIGTERM, handle_shutdown)
+    reset_demo_state("iot startup")
+    admin_trigger_server = start_admin_trigger_server()
+
     # 버전 명시 추가 (DeprecationWarning 경고 제거)
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
-    
+    if MQTT_USERNAME:
+        client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+
+    client.on_connect = on_connect
     client.on_message = on_message
-    client.connect("localhost", 1883)
-    
-    # 구독(Subscribe) 토픽들 등록
-    client.subscribe("seat/status/#")
-    client.subscribe("admin/trigger_lost_item")
-    client.subscribe("admin/config/squatting_time") # 설정 변경 토픽 추가
-    
+    client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT)
+
     print("🚀 Edge Server Ready. Listening for events...")
     client.loop_forever()

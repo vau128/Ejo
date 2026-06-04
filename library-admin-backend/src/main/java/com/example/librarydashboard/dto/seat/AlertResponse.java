@@ -9,7 +9,9 @@ public record AlertResponse(
         Long warningId,
         @JsonProperty("seat_num")
         Integer seatNum,
+        String warningType,
         String status,
+        String message,
         @JsonProperty("warning_time")
         LocalDateTime warningTime
 ) {

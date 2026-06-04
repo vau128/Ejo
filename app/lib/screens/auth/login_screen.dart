@@ -14,7 +14,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(text: 'student@library.com');
+  final _emailController = TextEditingController(text: 'student1@library.com');
   final _passwordController = TextEditingController(text: 'password123');
 
   @override
@@ -70,10 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          '로그인 창',
-                          style: theme.textTheme.bodyMedium,
-                        ),
+                        Text('로그인 창', style: theme.textTheme.bodyMedium),
                         const SizedBox(height: 24),
                         TextFormField(
                           controller: _emailController,
@@ -111,7 +108,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : const Text('학생 로그인'),
                         ),
@@ -120,13 +119,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           onPressed: isBusy
                               ? null
                               : () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    SignupScreen(appState: widget.appState),
-                              ),
-                            );
-                          },
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => SignupScreen(
+                                        appState: widget.appState,
+                                      ),
+                                    ),
+                                  );
+                                },
                           child: const Text('학생 회원가입'),
                         ),
                         const SizedBox(height: 16),
@@ -137,7 +137,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
-                            '테스트 계정\n이메일: student@library.com\n비밀번호: password123',
+                            '기본 계정 4개가 유지됩니다.\n예시: student1@library.com / password123',
                             style: theme.textTheme.bodySmall,
                           ),
                         ),

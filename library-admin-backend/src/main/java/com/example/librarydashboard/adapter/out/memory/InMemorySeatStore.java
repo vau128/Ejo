@@ -13,6 +13,7 @@ import java.util.Optional;
 public class InMemorySeatStore implements SeatStore {
 
     private final List<Map<String, Object>> seats = new ArrayList<>();
+    private final Map<String, String> seatIdByUserId = new LinkedHashMap<>();
 
     public InMemorySeatStore() {
         seats.add(mapOf("seatId", "seat-1", "seatNumber", 1, "status", "AVAILABLE"));
@@ -49,10 +50,12 @@ public class InMemorySeatStore implements SeatStore {
 
     @Override
     public void assignSeatToUser(String seatId, String userId) {
+        seatIdByUserId.put(userId, seatId);
     }
 
     @Override
     public void releaseSeatFromUser(String userId) {
+        seatIdByUserId.remove(userId);
     }
 
     private Map<String, Object> mapOf(Object... values) {

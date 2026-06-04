@@ -4,7 +4,8 @@
 // [1. 네트워크 설정]
 const char* ssid = "yerin";
 const char* password = "20040821";
-const char* mqtt_server = "172.20.10.9"; 
+const char* mqtt_server = "0.tcp.jp.ngrok.io";
+const int mqtt_port = 11606;
 
 // [2. 좌석 설정] - 구울 때 이 번호만 1~7로 바꾸기
 #define SEAT_NUM 1 
@@ -18,7 +19,7 @@ void setup() {
   Serial.begin(115200);
   pinMode(fsrPin, INPUT); // 입력 모드 명시
   setup_wifi();
-  client.setServer(mqtt_server, 1883);
+  client.setServer(mqtt_server, mqtt_port);
 }
 
 void setup_wifi() {

@@ -8,4 +8,10 @@ import java.util.List;
 public interface WarningRepository extends JpaRepository<Warning, Long> {
 
     List<Warning> findAllByOrderByWarningTimeDesc();
+
+    List<Warning> findAllBySeatNumOrderByWarningTimeDesc(Integer seatNum);
+
+    List<Warning> findAllByUserIdOrderByWarningTimeDesc(Long userId);
+
+    Warning findFirstBySeatNumAndStatusOrderByWarningTimeDesc(Integer seatNum, String status);
 }

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/app_settings.dart';
 import '../models/lost_item_report.dart';
+import '../models/posture_stats.dart';
 import '../models/seat.dart';
 import '../models/student_user.dart';
 import '../models/warning_alert.dart';
@@ -74,10 +75,23 @@ class AppApi {
 
   Future<List<Seat>> fetchSeats(String token) async {
     final json = await _request('GET', '/seats', token: token);
-    final items = (json['seats'] as List<dynamic>? ?? const [])
+    return (json['seats'] as List<dynamic>? ?? const [])
         .map((item) => Seat.fromJson(_map(item)))
         .toList();
-    return items;
+  }
+
+  Future<Seat?> fetchMySeat(String token) async {
+    final json = await _request('GET', '/me/seat', token: token);
+    final seat = json['seat'];
+    if (seat == null) {
+      return null;
+    }
+    return Seat.fromJson(_map(seat));
+  }
+
+  Future<PostureStats> fetchMyPostureStats(String token) async {
+    final json = await _request('GET', '/me/posture-stats', token: token);
+    return PostureStats.fromJson(json);
   }
 
   Future<String> toggleSeatSelection(String token, String seatId) async {
@@ -91,10 +105,9 @@ class AppApi {
 
   Future<List<LostItemReport>> fetchLostItems(String token) async {
     final json = await _request('GET', '/lost-items', token: token);
-    final items = (json['reports'] as List<dynamic>? ?? const [])
+    return (json['reports'] as List<dynamic>? ?? const [])
         .map((item) => LostItemReport.fromJson(_map(item)))
         .toList();
-    return items;
   }
 
   Future<AppSettings> fetchSettings(String token) async {
@@ -116,26 +129,11 @@ class AppApi {
     return AppSettings.fromJson(_map(json['settings']));
   }
 
-  Future<List<WarningAlert>> fetchWarnings() async {
-    final uri = Uri.parse('${ApiConfig.apiRootUrl}/warnings');
-    late final http.Response response;
-    try {
-      response = await http.get(
-        uri,
-        headers: const {'Accept': 'application/json'},
-      );
-    } catch (_) {
-      throw const AppApiException('알림을 불러오지 못했습니다.');
-    }
-
-    if (response.statusCode >= 400) {
-      throw const AppApiException('알림을 불러오지 못했습니다.');
-    }
-
-    final decoded = response.body.isEmpty
-        ? const []
-        : jsonDecode(response.body) as List<dynamic>;
-    return decoded.map((item) => WarningAlert.fromJson(_map(item))).toList();
+  Future<List<WarningAlert>> fetchWarnings(String token) async {
+    final json = await _request('GET', '/me/warnings', token: token);
+    return (json['warnings'] as List<dynamic>? ?? const [])
+        .map((item) => WarningAlert.fromJson(_map(item)))
+        .toList();
   }
 
   Future<Map<String, dynamic>> _request(
