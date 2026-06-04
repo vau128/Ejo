@@ -20,6 +20,8 @@ import com.example.librarydashboard.repository.SeatRepository;
 import com.example.librarydashboard.repository.SeatUsageRepository;
 import com.example.librarydashboard.repository.UserRepository;
 import com.example.librarydashboard.repository.WarningRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +44,7 @@ import java.util.UUID;
 public class AppService {
 
     private static final DateTimeFormatter DAY_LABEL_FORMATTER = DateTimeFormatter.ofPattern("M/d", Locale.KOREAN);
+    private static final Logger log = LoggerFactory.getLogger(AppService.class);
 
     private final StudentAccountStore studentAccountStore;
     private final SeatStore seatStore;
@@ -194,7 +197,7 @@ public class AppService {
         seatRepository.save(seat);
         seatApiService.syncSeatToDashboardState(seat);
         seatStore.assignSeatToUser(normalizedSeatId, String.valueOf(userEntity.getId()));
-        deviceEventGateway.publishSeatStatusChanged(normalizedSeatId, "SELECTED", mapOf("userId", userEntity.getId()));
+        publishSeatStatusChangedSafely(seatIdFromNumber(seat.getSeatNum()), "SELECTED", mapOf("userId", userEntity.getId()));
 
         return mapOf(
                 "message", seat.getSeatNum() + "번 좌석이 발권되었습니다.",
@@ -479,7 +482,7 @@ public class AppService {
         seatRepository.save(seat);
         seatApiService.syncSeatToDashboardState(seat);
         seatStore.releaseSeatFromUser(String.valueOf(user.getId()));
-        deviceEventGateway.publishSeatStatusChanged(seatId, "RELEASED", mapOf("userId", user.getId()));
+        publishSeatStatusChangedSafely(seatIdFromNumber(seat.getSeatNum()), "RELEASED", mapOf("userId", user.getId()));
 
         Map<String, Object> latestUser = studentAccountStore.findById(String.valueOf(user.getId()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "학생 계정을 찾을 수 없습니다."));
@@ -560,6 +563,14 @@ public class AppService {
                 "seatAlertEnabled", true,
                 "warningAlertEnabled", true
         ));
+    }
+
+    private void publishSeatStatusChangedSafely(String seatId, String status, Map<String, Object> payload) {
+        try {
+            deviceEventGateway.publishSeatStatusChanged(seatId, status, payload);
+        } catch (RuntimeException exception) {
+            log.warn("Failed to publish seat status change for seatId={} status={}", seatId, status, exception);
+        }
     }
 
     private Map<String, Object> mapOf(Object... values) {
