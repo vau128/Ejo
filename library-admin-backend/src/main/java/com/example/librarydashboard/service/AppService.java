@@ -357,16 +357,9 @@ public class AppService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> getLostItems(String token) {
-        Map<String, Object> user = requireUser(token);
-        String selectedSeatId = activeSeatIdForUser(toLong(user.get("id")));
-        if (selectedSeatId == null) {
-            return mapOf("reports", List.of());
-        }
-
-        int seatNum = parseSeatNumber(selectedSeatId);
+        requireUser(token);
         return mapOf(
                 "reports", lostItemRepository.findAllByOrderByDetectedTimeDesc().stream()
-                        .filter(item -> Objects.equals(item.getSeatNum(), seatNum))
                         .map(this::lostItemReport)
                         .toList()
         );
