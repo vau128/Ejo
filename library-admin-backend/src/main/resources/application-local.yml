@@ -43,8 +43,8 @@ app:
     enabled: false
     region: ap-northeast-2
     s3-bucket: local-library-assets
-    access-key: replace-me
-    secret-key: replace-me
+    access-key: ${AWS_ACCESS_KEY_ID:}
+    secret-key: ${AWS_SECRET_ACCESS_KEY:}
 
 springdoc:
   swagger-ui:

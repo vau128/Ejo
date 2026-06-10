@@ -23,6 +23,7 @@ import com.example.librarydashboard.repository.WarningRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -61,6 +62,7 @@ public class AppService {
     private final UserRepository userRepository;
     private final SeatUsageRepository seatUsageRepository;
     private final PostureLogRepository postureLogRepository;
+    private final PasswordEncoder passwordEncoder;
 
     public AppService(
             StudentAccountStore studentAccountStore,
@@ -74,7 +76,8 @@ public class AppService {
             WarningRepository warningRepository,
             UserRepository userRepository,
             SeatUsageRepository seatUsageRepository,
-            PostureLogRepository postureLogRepository
+            PostureLogRepository postureLogRepository,
+            PasswordEncoder passwordEncoder
     ) {
         this.studentAccountStore = studentAccountStore;
         this.seatStore = seatStore;
@@ -88,6 +91,7 @@ public class AppService {
         this.userRepository = userRepository;
         this.seatUsageRepository = seatUsageRepository;
         this.postureLogRepository = postureLogRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public String resolveToken(String authorization, String studentToken) {
@@ -100,14 +104,14 @@ public class AppService {
         throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "학생 인증 토큰이 필요합니다.");
     }
 
-    @Transactional(readOnly = true)
     public Map<String, Object> login(StudentLoginRequest request) {
         Map<String, Object> user = studentAccountStore
                 .findByEmail(request.email().trim().toLowerCase(Locale.ROOT))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호를 확인해주세요."));
-        if (!Objects.equals(user.get("password"), request.password())) {
+        if (!passwordMatches(user.get("password"), request.password())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호를 확인해주세요.");
         }
+        upgradePasswordIfNeeded(user, request.password());
         return buildAuthResponse(user);
     }
 
@@ -128,7 +132,7 @@ public class AppService {
                 "name", request.name().trim(),
                 "studentId", request.studentId().trim(),
                 "email", normalizedEmail,
-                "password", request.password(),
+                "password", passwordEncoder.encode(request.password()),
                 "role", "USER",
                 "agreedToPrivacy", true,
                 "photo", null
@@ -399,6 +403,34 @@ public class AppService {
     private Map<String, Object> requireUser(String token) {
         return studentAccountStore.findByToken(token)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "학생 인증 세션이 만료되었거나 유효하지 않습니다."));
+    }
+
+    private boolean passwordMatches(Object storedPassword, String rawPassword) {
+        if (storedPassword == null) {
+            return false;
+        }
+        String savedPassword = String.valueOf(storedPassword);
+        if (isBcryptHash(savedPassword)) {
+            return passwordEncoder.matches(rawPassword, savedPassword);
+        }
+        return Objects.equals(savedPassword, rawPassword);
+    }
+
+    private void upgradePasswordIfNeeded(Map<String, Object> user, String rawPassword) {
+        Object storedPassword = user.get("password");
+        if (storedPassword == null) {
+            return;
+        }
+        String savedPassword = String.valueOf(storedPassword);
+        if (isBcryptHash(savedPassword)) {
+            return;
+        }
+        user.put("password", passwordEncoder.encode(rawPassword));
+        studentAccountStore.save(user);
+    }
+
+    private boolean isBcryptHash(String value) {
+        return value.startsWith("$2a$") || value.startsWith("$2b$") || value.startsWith("$2y$");
     }
 
     private User requireUserEntity(Map<String, Object> user) {

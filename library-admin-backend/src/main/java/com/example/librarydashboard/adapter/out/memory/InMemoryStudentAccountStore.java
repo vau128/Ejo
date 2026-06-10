@@ -8,6 +8,7 @@ import com.example.librarydashboard.repository.SeatRepository;
 import com.example.librarydashboard.repository.SeatUsageRepository;
 import com.example.librarydashboard.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -22,16 +23,19 @@ public class InMemoryStudentAccountStore implements StudentAccountStore {
     private final UserRepository userRepository;
     private final SeatRepository seatRepository;
     private final SeatUsageRepository seatUsageRepository;
+    private final PasswordEncoder passwordEncoder;
     private final Map<String, Long> userIdByToken = new ConcurrentHashMap<>();
 
     public InMemoryStudentAccountStore(
             UserRepository userRepository,
             SeatRepository seatRepository,
-            SeatUsageRepository seatUsageRepository
+            SeatUsageRepository seatUsageRepository,
+            PasswordEncoder passwordEncoder
     ) {
         this.userRepository = userRepository;
         this.seatRepository = seatRepository;
         this.seatUsageRepository = seatUsageRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @PostConstruct
@@ -125,7 +129,7 @@ public class InMemoryStudentAccountStore implements StudentAccountStore {
                 email,
                 name,
                 studentId,
-                "password123",
+                passwordEncoder.encode("password123"),
                 "USER",
                 true,
                 null
