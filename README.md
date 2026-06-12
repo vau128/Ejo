@@ -117,7 +117,7 @@ $ make web-dev
 | **이지윤** | <ul><li>요구사항 정의 및 UI/UX 와이어프레임 설계</li><li>React 관리자 웹 대시보드 개발</li><li>Flutter 학생용 모바일 앱 연동</li><li>Spring Boot 백엔드 REST API 구현</li></ul> |
 | **김현서** | <ul><li>Roboflow Custom Dataset 구축</li><li>YOLO 계열 모델(v5, v8, v10, v11) 성능 교차 비교 검증</li><li>YOLOv8s 모델 선정 및 10대 핵심 물품 추론 최적화</li></ul> |
 | **정예린** | <ul><li>FSR 406 3채널 압력 센서 하드웨어 회로 설계</li><li>ESP32 임베디드 펌웨어 구현 및 알고리즘 구축</li><li>라즈베리파이 로컬 MQTT(Mosquitto) 송수신 로직 구현</li></ul> |
-| **한승찬** | <ul><li>데이터베이스 스키마 및 Entity 구조 설계, ERD 모델링</li><li>전체 통합 일정 관리</li></ul> |
+| **한승찬** | <ul><li>데이터베이스 스키마 및 Entity 구조 설계, ERD 모델링</li><li>전체 통합 일정 관리</li><li>시스템 아키텍쳐 및 알고리즘</li></ul> |
 
 <br/>
 <br/>
