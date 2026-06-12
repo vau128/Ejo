@@ -165,5 +165,3 @@ Ejo/
     ├── add_healthcare.ino   # FSR 3채널 임베디드 펌웨어
     └── main_system.py       # YOLOv8s 추론, 사석화 타이머 및 S3 자동 업로드 
 ```
-
-
