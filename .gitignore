@@ -15,3 +15,35 @@ iot/__pycache__/
 
 # Secrets
 *.pem
+
+# Secret keys
+*.pem
+*.key
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Spring production config
+application-prod.yml
+
+# Python virtual environment
+.venv/
+venv/
+iot/.venv/
+
+# Build outputs
+target/
+build/
+dist/
+node_modules/
+
+# Logs
+*.log
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.tar.gz
